@@ -1,6 +1,6 @@
 // The command bus. Every change to the project goes through dispatch(): the UI, undo/redo,
 // autosave and (later) the AI assistant all use this one entry point.
-import { BAR_TICKS, PAD_COUNT, STEP_COUNT, emptyPad, emptyProject, sliceBounds } from './types';
+import { BANK_COUNT, BAR_TICKS, PAD_COUNT, STEP_COUNT, TOTAL_PADS, bankOf, emptyPad, emptyProject, sliceBounds } from './types';
 import type { LoopEvent, Pad, Project, Sample } from './types';
 
 type Handler = (p: Project, args: any) => Project;
@@ -47,15 +47,16 @@ export const commands: Record<string, CommandDef> = {
   },
 
   'pads.assignSlices': {
-    undoable: true, describe: 'Send the first 16 slices of a sample to pads 1-16',
+    undoable: true, describe: 'Send the slices of a sample to pads, starting at the first pad of a bank (default: the bank on screen) and continuing into later banks',
     run: (p, a) => {
       const s = p.samples.find((x) => x.id === a.sampleId);
       if (!s) return p;
       const b = sliceBounds(s);
+      const first = clamp(a.bank ?? bankOf(p.selectedPad), 0, BANK_COUNT - 1) * PAD_COUNT;
       return {
         ...p,
-        pads: p.pads.map((pad, i) => (i < b.length - 1
-          ? { ...pad, sampleId: s.id, start: b[i], end: b[i + 1], reverse: false, semitones: 0, gain: 1 }
+        pads: p.pads.map((pad, i) => (i >= first && i - first < b.length - 1
+          ? { ...pad, sampleId: s.id, start: b[i - first], end: b[i - first + 1], reverse: false, semitones: 0, gain: 1 }
           : pad)),
       };
     },
@@ -71,7 +72,8 @@ export const commands: Record<string, CommandDef> = {
     })),
   },
   'pad.clear': { undoable: true, describe: 'Empty a pad and its steps and recorded hits', run: (p, a) => ({ ...mapPad(p, a.pad, () => emptyPad()), events: p.events.filter((e) => e.pad !== a.pad) }) },
-  'pad.select': { undoable: false, describe: 'Select a pad for editing', run: (p, a) => ({ ...p, selectedPad: clamp(a.pad, 0, PAD_COUNT - 1) }) },
+  'pad.select': { undoable: false, describe: 'Select a pad for editing', run: (p, a) => ({ ...p, selectedPad: clamp(a.pad, 0, TOTAL_PADS - 1) }) },
+  'bank.select': { undoable: false, describe: 'Show pad bank 0-3 (A-D)', run: (p, a) => ({ ...p, selectedPad: clamp(a.bank, 0, BANK_COUNT - 1) * PAD_COUNT + (p.selectedPad % PAD_COUNT) }) },
 
   'seq.setStep': {
     undoable: true, describe: 'Set one step of a pad (velocity 0 = off)',

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { engine } from '../audio/engine';
 import { PEAK_BUCKET } from '../audio/analysis';
 import { dispatch } from '../core/bus';
-import { sliceBounds } from '../core/types';
+import { PAD_COUNT, TOTAL_PADS, bankOf, padLabel, sliceBounds } from '../core/types';
 import type { Project, Sample } from '../core/types';
 import { padHue } from './colors';
 
@@ -41,6 +41,8 @@ export function Waveform({ sample, project, tool }: { sample: Sample; project: P
     const peaks = engine.peaks.get(sample.id);
     const bounds = [0, ...[...markers].sort((a, b) => a - b), sample.duration];
     const mid = size.h / 2;
+    const firstPad = bankOf(project.selectedPad) * PAD_COUNT; // where Send to pads would start
+    const fits = (s: number) => firstPad + s < TOTAL_PADS;
     // Each slice gets the colour of the pad it will land on.
     for (let s = 0; s < bounds.length - 1; s++) {
       const x0 = Math.max(0, xOf(bounds[s])), x1 = Math.min(size.w, xOf(bounds[s + 1]));
@@ -49,7 +51,7 @@ export function Waveform({ sample, project, tool }: { sample: Sample; project: P
       g.fillStyle = `hsl(${hue} 60% 50% / ${flash === s ? 0.28 : s % 2 ? 0.07 : 0.12})`;
       g.fillRect(x0, 0, x1 - x0, size.h);
       if (!peaks) continue;
-      g.fillStyle = s < 16 ? `hsl(${hue} 90% 66%)` : 'hsl(220 8% 55%)';
+      g.fillStyle = fits(s) ? `hsl(${hue} 90% 66%)` : 'hsl(220 8% 55%)';
       const perPx = (span * sample.sampleRate) / PEAK_BUCKET / size.w;
       for (let x = Math.floor(x0); x < x1; x++) {
         const b0 = Math.floor((tOf(x) * sample.sampleRate) / PEAK_BUCKET);
@@ -60,7 +62,7 @@ export function Waveform({ sample, project, tool }: { sample: Sample; project: P
         const y0 = mid - hi * mid * 0.92, y1 = mid - lo * mid * 0.92;
         g.fillRect(x, y0, 1, Math.max(1, y1 - y0));
       }
-      if (s < 16 && x1 - x0 > 16) { g.font = '600 11px system-ui, sans-serif'; g.fillStyle = `hsl(${hue} 90% 78%)`; g.fillText(String(s + 1), Math.max(x0, 0) + 5, size.h - 7); }
+      if (fits(s) && x1 - x0 > 22) { g.font = '600 11px system-ui, sans-serif'; g.fillStyle = `hsl(${hue} 90% 78%)`; g.fillText(padLabel(firstPad + s), Math.max(x0, 0) + 5, size.h - 7); }
     }
     markers.forEach((t, i) => {
       const x = xOf(t);
@@ -70,7 +72,7 @@ export function Waveform({ sample, project, tool }: { sample: Sample; project: P
       g.fillRect(x - (active ? 1 : 0.5), 0, active ? 2 : 1, size.h);
       g.beginPath(); g.moveTo(x - 7, 0); g.lineTo(x + 7, 0); g.lineTo(x + 7, 9); g.lineTo(x, 17); g.lineTo(x - 7, 9); g.closePath(); g.fill();
     });
-  }, [sample, size, view, markers, flash, drag]); // eslint-disable-line
+  }, [sample, size, view, markers, flash, drag, project.selectedPad]); // eslint-disable-line
 
   const nearest = (x: number) => {
     let best = -1, d = GRAB_PX;

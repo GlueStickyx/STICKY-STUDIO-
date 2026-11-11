@@ -81,6 +81,16 @@ try {
   check('auto-slice finds slices', parseInt(meta) >= 6, meta);
   await page.click('#topads');
 
+  // Pad banks: a later bank is empty until slices are sent to it, and both banks play in the export.
+  check('20 slices spilled four pads into bank B', await (async () => { await page.click('#bank-1'); return (await page.locator('.pad.loaded').count()) === 4; })());
+  await page.click('#bank-2');
+  check('bank C starts empty', await page.locator('.pad.loaded').count() === 0);
+  await page.click('#topads');
+  check('send to pads fills the bank on screen', await page.locator('.pad.loaded').count() > 0 && (await page.locator('#pad-0').innerText()) === 'C1');
+  await page.click('#undo');
+  check('undo empties bank C again', await page.locator('.pad.loaded').count() === 0);
+  await page.click('#bank-0');
+
   // Pad editing.
   await page.click('.tab:has-text("Pad")');
   await page.click('#pad-reverse');
@@ -105,7 +115,7 @@ try {
   const sse = (events) => events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
   const start = { type: 'message_start', message: { id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-opus-5-5', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 1 } } };
   const end = (reason) => [{ type: 'message_delta', delta: { stop_reason: reason, stop_sequence: null }, usage: { output_tokens: 9 } }, { type: 'message_stop' }];
-  const pattern = { patterns: [{ pad: 9, steps: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0] }] };
+  const pattern = { patterns: [{ pad: 'A9', steps: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0] }] };
   const bodies = [];
   let mode = 'ok';
   await page.route('https://api.anthropic.com/**', async (route) => {
@@ -135,7 +145,7 @@ try {
   await page.click('#chat-send');
   await page.waitForSelector('.msg.assistant:has-text("Four on the floor")');
   check('assistant reply is shown', true);
-  check('assistant change is logged', await page.locator('.change:has-text("Wrote patterns for pad 9")').count() === 1);
+  check('assistant change is logged', await page.locator('.change:has-text("Wrote patterns for pad A9")').count() === 1);
   check('request used the expected model, tools and cached system prompt',
     bodies[0].json.model === 'claude-opus-5-5' && bodies[0].json.tools.length >= 6 && bodies[0].json.system[0].cache_control?.type === 'ephemeral' && bodies[0].json.stream === true);
   if (process.env.DEBUG_HEADERS) console.log(Object.keys(bodies[0].headers).join(' '));
@@ -187,9 +197,9 @@ try {
         window.__asked.push(input);
         const tool = opts.tools.find((t) => t.name === 'write_patterns');
         let bad = '';
-        try { await tool.execute({ patterns: [{ pad: 99, steps: [] }] }); } catch (e) { bad = String(e.message); }
+        try { await tool.execute({ patterns: [{ pad: 'Z9', steps: [] }] }); } catch (e) { bad = String(e.message); }
         window.__badInput = bad;
-        await tool.execute({ patterns: [{ pad: 4, steps: [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0] }] });
+        await tool.execute({ patterns: [{ pad: 'A4', steps: [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0] }] });
         opts.onText({ text: 'Kick pattern on pad 4.', delta: 'Kick pattern on pad 4.' });
         return { text: 'Kick pattern on pad 4.', truncated: false };
       };
@@ -206,8 +216,8 @@ try {
     await apage.fill('#chat-input', 'kick on pad 4');
     await apage.click('#chat-send');
     await apage.waitForSelector('.msg.assistant:has-text("Kick pattern on pad 4")');
-    check('artifact assistant writes into the studio', await apage.locator('.change:has-text("Wrote patterns for pad 4")').count() === 1);
-    check('bad tool input is reported back to Claude, not applied', (await apage.evaluate(() => window.__badInput)).includes('integer 1-16'));
+    check('artifact assistant writes into the studio', await apage.locator('.change:has-text("Wrote patterns for pad A4")').count() === 1);
+    check('bad tool input is reported back to Claude, not applied', (await apage.evaluate(() => window.__badInput)).includes('pad name like'));
     const asked = await apage.evaluate(() => window.__asked[0]);
     check('artifact request starts with the instructions and ends with the message', asked.length === 2 && asked[0].content.includes('Sticky Studio') && asked[1].content === 'kick on pad 4');
     await apage.click('text=Undo these changes');

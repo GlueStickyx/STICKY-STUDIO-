@@ -38,8 +38,9 @@ describe('reading', () => {
   it('get_studio_state reports pads with 1-based numbers and step strings', () => {
     dispatch('seq.setRow', { pad: 0, steps: [1, 0, 0.5, 0] });
     const s = JSON.parse(call('get_studio_state', {}).text);
-    expect(s.pads[0]).toMatchObject({ pad: 1, sample: 'Test', steps: 'X.o.............' });
-    expect(s.pads[2]).toEqual({ pad: 3, empty: true });
+    expect(s.pads[0]).toMatchObject({ pad: 'A1', sample: 'Test', steps: 'X.o.............' });
+    expect(s.pads).toHaveLength(2); // empty pads are not listed
+    expect(s.bank_on_screen).toBe('A');
   });
   it('describe_pads tells a low thump from bright noise', () => {
     const d = JSON.parse(call('describe_pads', {}).text);
@@ -59,35 +60,35 @@ describe('reading', () => {
 describe('writing', () => {
   it('write_patterns sets steps and warns about empty pads', () => {
     const steps = Array.from({ length: 16 }, (_, i) => (i % 4 === 0 ? 1 : 0));
-    const r = call('write_patterns', { patterns: [{ pad: 1, steps }, { pad: 5, steps }] });
+    const r = call('write_patterns', { patterns: [{ pad: 'A1', steps }, { pad: 'A5', steps }] });
     expect(r.isError).toBe(false);
-    expect(r.text).toMatch(/pad 5 has no audio/);
-    expect(r.change).toBe('Wrote patterns for pad 1, 5');
+    expect(r.text).toMatch(/pad A5 has no audio/);
+    expect(r.change).toBe('Wrote patterns for pad A1, A5');
     expect(getProject().pads[0].steps).toEqual(steps);
   });
   it('clear_other_pads wipes unlisted rows', () => {
     dispatch('seq.setRow', { pad: 1, steps: [1] });
-    call('write_patterns', { patterns: [{ pad: 1, steps: new Array(16).fill(0) }], clear_other_pads: true });
+    call('write_patterns', { patterns: [{ pad: 'A1', steps: new Array(16).fill(0) }], clear_other_pads: true });
     expect(getProject().pads[1].steps.every((v) => v === 0)).toBe(true);
   });
   it('rejects bad input without changing anything', () => {
     for (const bad of [
-      { patterns: [{ pad: 0, steps: new Array(16).fill(0) }] },
-      { patterns: [{ pad: 1, steps: [1, 0] }] },
-      { patterns: [{ pad: 1, steps: new Array(16).fill(2) }] },
+      { patterns: [{ pad: 'A0', steps: new Array(16).fill(0) }] },
+      { patterns: [{ pad: 'A1', steps: [1, 0] }] },
+      { patterns: [{ pad: 'A1', steps: new Array(16).fill(2) }] },
       { patterns: [] }, {}, null, 'x', [1],
     ]) {
       const r = call('write_patterns', bad);
       expect(r.isError).toBe(true);
     }
-    expect(call('edit_pads', { pads: [{ pad: 9, semitones: 3 }] }).isError).toBe(true); // empty pad
-    expect(call('edit_pads', { pads: [{ pad: 1, semitones: 40 }] }).isError).toBe(true);
+    expect(call('edit_pads', { pads: [{ pad: 'A9', semitones: 3 }] }).isError).toBe(true); // empty pad
+    expect(call('edit_pads', { pads: [{ pad: 'A1', semitones: 40 }] }).isError).toBe(true);
     expect(call('set_transport', { bpm: 999 }).isError).toBe(true);
     expect(call('nope', {}).isError).toBe(true);
     expect(canUndo()).toBe(false);
   });
   it('edit_pads and set_transport apply values', () => {
-    call('edit_pads', { pads: [{ pad: 2, volume_percent: 50, semitones: -5, reverse: true }] });
+    call('edit_pads', { pads: [{ pad: 'A2', volume_percent: 50, semitones: -5, reverse: true }] });
     expect(getProject().pads[1]).toMatchObject({ gain: 0.5, semitones: -5, reverse: true });
     call('set_transport', { bpm: 92, swing_percent: 20, loop_bars: 4, playing: true });
     expect(getProject()).toMatchObject({ bpm: 92, swing: 0.2, bars: 4 });
@@ -99,6 +100,22 @@ describe('writing', () => {
     expect(getProject().pads.filter((p) => p.sampleId).length).toBe(8);
     expect(getProject().pads[7].end).toBeCloseTo(2);
   });
+  it('slices spill into later banks and can start at a chosen bank', () => {
+    const r = call('slice_sample', { method: 'grid', parts: 20, send_to_pads: true, bank: 'C' });
+    expect(r.text).toMatch(/20 of them are on pads C1 to D4/);
+    const pads = getProject().pads;
+    expect(pads[32].sampleId).toBe('s1');
+    expect(pads[51].end).toBeCloseTo(2);
+    expect(pads[52].sampleId).toBeNull();
+    expect(call('slice_sample', { method: 'grid', parts: 64, send_to_pads: true, bank: 'D' }).text).toMatch(/16 of them are on pads D1 to D16/);
+    expect(call('slice_sample', { method: 'grid', bank: 'Z' }).isError).toBe(true);
+  });
+  it('pad names are parsed across banks and bad names are rejected', () => {
+    call('slice_sample', { method: 'grid', parts: 20, send_to_pads: true, bank: 'A' });
+    expect(call('edit_pads', { pads: [{ pad: 'b2', semitones: 3 }] }).isError).toBe(false);
+    expect(getProject().pads[17].semitones).toBe(3);
+    for (const bad of ['E1', 'A17', 'A0', '', 5, null]) expect(call('edit_pads', { pads: [{ pad: bad, semitones: 1 }] }).isError).toBe(true);
+  });
   it('slice_sample transients finds the second hit', () => {
     call('slice_sample', { method: 'transients', sensitivity: 0.5 });
     const m = getProject().samples[0].markers;
@@ -107,7 +124,7 @@ describe('writing', () => {
   it('erase targets', () => {
     dispatch('seq.setRow', { pad: 0, steps: [1] });
     dispatch('loop.addEvent', { event: { id: 'e', pad: 0, tick: 0, vel: 1 } });
-    call('erase', { target: 'pad_recorded', pad: 1 });
+    call('erase', { target: 'pad_recorded', pad: 'A1' });
     expect(getProject().events).toHaveLength(0);
     call('erase', { target: 'all_steps' });
     expect(getProject().pads[0].steps.every((v) => v === 0)).toBe(true);
@@ -116,8 +133,8 @@ describe('writing', () => {
   it('a whole assistant turn is one undo step, however long it takes', async () => {
     call('set_transport', { bpm: 90 });
     await new Promise((r) => setTimeout(r, 1700)); // longer than the normal merge window
-    call('write_patterns', { patterns: [{ pad: 1, steps: new Array(16).fill(1) }] });
-    call('edit_pads', { pads: [{ pad: 1, semitones: 2 }] });
+    call('write_patterns', { patterns: [{ pad: 'A1', steps: new Array(16).fill(1) }] });
+    call('edit_pads', { pads: [{ pad: 'A1', semitones: 2 }] });
     undo();
     expect(getProject().bpm).toBe(120);
     expect(getProject().pads[0].steps.every((v) => v === 0)).toBe(true);

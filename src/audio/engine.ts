@@ -2,7 +2,7 @@
 // recording a hit dispatches 'loop.addEvent' like any other change.
 import { dispatch, getProject } from '../core/bus';
 import { beatsInWindow, hitsInWindow, loopTicks, quantizeTick, secondsPerTick } from '../core/sequence';
-import { uid } from '../core/types';
+import { TOTAL_PADS, uid } from '../core/types';
 import type { Pad, Project } from '../core/types';
 import { computePeaks, mixToMono } from './analysis';
 
@@ -84,7 +84,7 @@ export class Engine {
   buffers = new Map<string, AudioBuffer>();
   peaks = new Map<string, Float32Array>();
   private rev = new Map<string, AudioBuffer>();
-  private voices: (Voice | null)[] = new Array(16).fill(null);
+  private voices: (Voice | null)[] = new Array(TOTAL_PADS).fill(null);
   private auditionVoice: Voice | null = null;
   playing = false;
   recording = false;
@@ -255,7 +255,7 @@ export class Engine {
       if (!revCache.has(id)) revCache.set(id, reverseBuffer(off, b));
       return revCache.get(id)!;
     };
-    const voices: (Voice | null)[] = new Array(16).fill(null);
+    const voices: (Voice | null)[] = new Array(TOTAL_PADS).fill(null);
     scheduleHits(off, master, p, 0, L, (t) => t * spt, this.buffers, rev, (pad, time, v) => {
       if (v) { voices[pad]?.stop(time); voices[pad] = v; }
       return true;

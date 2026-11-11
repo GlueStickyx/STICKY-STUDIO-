@@ -3,7 +3,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { describeAudio, detectTransients } from '../audio/analysis';
 import { dispatch, getProject } from '../core/bus';
-import { PAD_COUNT, STEP_COUNT, sliceBounds } from '../core/types';
+import { BANK_NAMES, PAD_COUNT, STEP_COUNT, TOTAL_PADS, bankOf, padLabel, parsePad, sliceBounds } from '../core/types';
 
 /** What the tools need from the running studio. Injected so the tools can be tested without audio hardware. */
 export interface StudioDeps {
@@ -16,7 +16,7 @@ export interface ToolOutcome { text: string; isError: boolean; change: string | 
 
 const obj = (properties: Record<string, unknown>, required: string[] = []) =>
   ({ type: 'object' as const, properties, required, additionalProperties: false });
-const padProp = { type: 'integer', minimum: 1, maximum: PAD_COUNT, description: 'Pad number 1-16' };
+const padProp = { type: 'string', pattern: '^[A-D](1[0-6]|[1-9])$', description: 'Pad name: bank letter A-D plus number 1-16, for example "A1" or "C12"' };
 
 export const TOOLS: Anthropic.Beta.BetaTool[] = [
   {
@@ -63,12 +63,13 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
   },
   {
     name: 'slice_sample',
-    description: 'Re-slice the sample currently shown in the chop view. "transients" cuts at detected hits (sensitivity 0-1, higher = more slices); "grid" cuts into equal parts. Optionally send the first 16 slices to pads 1-16, which replaces what those pads play.',
+    description: 'Re-slice the sample currently shown in the chop view. "transients" cuts at detected hits (sensitivity 0-1, higher = more slices); "grid" cuts into equal parts. Optionally send the slices to pads, which replaces what those pads play: they fill the chosen bank from pad 1 and continue into later banks (64 pads in total).',
     input_schema: obj({
       method: { type: 'string', enum: ['transients', 'grid'] },
       sensitivity: { type: 'number', minimum: 0, maximum: 1 },
       parts: { type: 'integer', minimum: 2, maximum: 64 },
       send_to_pads: { type: 'boolean' },
+      bank: { type: 'string', enum: ['A', 'B', 'C', 'D'], description: 'Bank to start filling when send_to_pads is true. Default: the bank on screen.' },
     }, ['method']),
   },
   {
@@ -81,7 +82,9 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
 for (const t of TOOLS) (t as { eager_input_streaming?: boolean }).eager_input_streaming = true;
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-const isPad = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= PAD_COUNT;
+const isPad = (v: unknown) => parsePad(v) !== null;
+const padIx = (v: unknown) => parsePad(v)!;
+const BAD_PAD = 'a pad name like "A1" (bank A-D, number 1-16)';
 const fail = (text: string): ToolOutcome => ({ text, isError: true, change: null });
 const ok = (text: string, change: string | null = null): ToolOutcome => ({ text, isError: false, change });
 const stepString = (steps: number[]) => steps.map((v) => (v >= 0.95 ? 'X' : v > 0 ? 'o' : '.')).join('');
@@ -93,11 +96,13 @@ function stateJson(deps: StudioDeps): string {
     step_legend: '16 characters = 16th notes of one bar. X = full hit, o = soft hit, . = off',
     chop_view_sample: p.samples.find((s) => s.id === p.activeSampleId)?.name ?? null,
     samples: p.samples.map((s) => ({ name: s.name, seconds: +s.duration.toFixed(2), detected_bpm: s.bpm, slices: s.markers.length + 1 })),
-    pads: p.pads.map((pad, i) => {
+    pad_names: 'Four banks of 16 pads: A1-A16, B1-B16, C1-C16, D1-D16. Pads not listed below are empty.',
+    bank_on_screen: BANK_NAMES[bankOf(p.selectedPad)],
+    pads: p.pads.flatMap((pad, i) => {
       const s = p.samples.find((x) => x.id === pad.sampleId);
-      if (!s) return { pad: i + 1, empty: true };
+      if (!s) return [];
       return {
-        pad: i + 1, sample: s.name, from_seconds: +pad.start.toFixed(3), to_seconds: +pad.end.toFixed(3),
+        pad: padLabel(i), sample: s.name, from_seconds: +pad.start.toFixed(3), to_seconds: +pad.end.toFixed(3),
         volume_percent: Math.round(pad.gain * 100), semitones: pad.semitones, reverse: pad.reverse,
         steps: stepString(pad.steps), recorded_hits: p.events.filter((e) => e.pad === i).length,
       };
@@ -120,7 +125,7 @@ export function runTool(name: string, input: unknown, deps: StudioDeps, group: s
         const au = pad.sampleId ? deps.audio(pad.sampleId) : null;
         if (!au) return null;
         const seg = au.mono.subarray(Math.floor(pad.start * au.sampleRate), Math.floor(pad.end * au.sampleRate));
-        return { pad: i + 1, ...describeAudio(seg, au.sampleRate) };
+        return { pad: padLabel(i), ...describeAudio(seg, au.sampleRate) };
       }).filter(Boolean);
       return ok(out.length ? JSON.stringify(out) : 'No pads have audio yet. Slice a sample and send it to the pads first.');
     }
@@ -138,31 +143,31 @@ export function runTool(name: string, input: unknown, deps: StudioDeps, group: s
     case 'write_patterns': {
       if (!Array.isArray(a.patterns) || !a.patterns.length) return fail('patterns must be a non-empty array.');
       for (const row of a.patterns) {
-        if (!isPad(row?.pad)) return fail('Each pattern needs pad: an integer 1-16.');
+        if (!isPad(row?.pad)) return fail(`Each pattern needs pad: ${BAD_PAD}.`);
         if (!Array.isArray(row.steps) || row.steps.length !== STEP_COUNT || !row.steps.every((v: unknown) => isNum(v) && v >= 0 && v <= 1)) {
           return fail(`Pad ${row.pad}: steps must be exactly 16 numbers between 0 and 1.`);
         }
       }
-      const listed = new Set<number>(a.patterns.map((r: any) => r.pad - 1));
-      const empty = [...listed].filter((i) => !p.pads[i].sampleId).map((i) => i + 1);
+      const listed = new Set<number>(a.patterns.map((r: any) => padIx(r.pad)));
+      const empty = [...listed].filter((i) => !p.pads[i].sampleId).map(padLabel);
       if (a.clear_other_pads) p.pads.forEach((pad, i) => { if (!listed.has(i) && pad.steps.some((v) => v > 0)) run('seq.setRow', { pad: i, steps: [] }); });
-      for (const row of a.patterns) run('seq.setRow', { pad: row.pad - 1, steps: row.steps });
-      const pads = [...listed].map((i) => i + 1).sort((x, y) => x - y).join(', ');
+      for (const row of a.patterns) run('seq.setRow', { pad: padIx(row.pad), steps: row.steps });
+      const pads = [...listed].sort((x, y) => x - y).map(padLabel).join(', ');
       return ok(empty.length ? `Written. Warning: pad ${empty.join(', ')} has no audio, so its steps will be silent.` : 'Written.', `Wrote patterns for pad ${pads}`);
     }
 
     case 'edit_pads': {
       if (!Array.isArray(a.pads) || !a.pads.length) return fail('pads must be a non-empty array.');
       for (const e of a.pads) {
-        if (!isPad(e?.pad)) return fail('Each entry needs pad: an integer 1-16.');
+        if (!isPad(e?.pad)) return fail(`Each entry needs pad: ${BAD_PAD}.`);
         if (e.volume_percent !== undefined && (!isNum(e.volume_percent) || e.volume_percent < 0 || e.volume_percent > 150)) return fail('volume_percent must be 0 to 150.');
         if (e.semitones !== undefined && (!Number.isInteger(e.semitones) || e.semitones < -12 || e.semitones > 12)) return fail('semitones must be an integer from -12 to 12.');
-        if (!p.pads[e.pad - 1].sampleId) return fail(`Pad ${e.pad} is empty; nothing to edit.`);
+        if (!p.pads[padIx(e.pad)].sampleId) return fail(`Pad ${e.pad} is empty; nothing to edit.`);
       }
       for (const e of a.pads) {
-        run('pad.set', { pad: e.pad - 1, gain: e.volume_percent !== undefined ? e.volume_percent / 100 : undefined, semitones: e.semitones, reverse: e.reverse });
+        run('pad.set', { pad: padIx(e.pad), gain: e.volume_percent !== undefined ? e.volume_percent / 100 : undefined, semitones: e.semitones, reverse: e.reverse });
       }
-      return ok('Done.', `Edited pad ${a.pads.map((e: any) => e.pad).join(', ')}`);
+      return ok('Done.', `Edited pad ${a.pads.map((e: any) => padLabel(padIx(e.pad))).join(', ')}`);
     }
 
     case 'slice_sample': {
@@ -180,22 +185,26 @@ export function runTool(name: string, input: unknown, deps: StudioDeps, group: s
         if (!au) return fail('The sample audio is not loaded.');
         markers = detectTransients(au.mono, au.sampleRate, sens);
       } else return fail('method must be "transients" or "grid".');
+      const bank = a.bank === undefined ? bankOf(p.selectedPad) : BANK_NAMES.indexOf(String(a.bank).toUpperCase());
+      if (bank < 0) return fail('bank must be "A", "B", "C" or "D".');
       run('sample.setMarkers', { id: s.id, markers });
-      if (a.send_to_pads) run('pads.assignSlices', { sampleId: s.id });
+      if (a.send_to_pads) run('pads.assignSlices', { sampleId: s.id, bank });
       const n = sliceBounds(getProject().samples.find((x) => x.id === s.id)!).length - 1;
-      return ok(`"${s.name}" now has ${n} slices${a.send_to_pads ? `; the first ${Math.min(16, n)} are on pads 1-${Math.min(16, n)}` : ''}.`,
-        `Sliced "${s.name}" into ${n}${a.send_to_pads ? ' and sent to pads' : ''}`);
+      const placed = Math.min(n, TOTAL_PADS - bank * PAD_COUNT);
+      return ok(`"${s.name}" now has ${n} slices${a.send_to_pads ? `; ${placed} of them are on pads ${padLabel(bank * PAD_COUNT)} to ${padLabel(bank * PAD_COUNT + placed - 1)}` : ''}.`,
+        `Sliced "${s.name}" into ${n}${a.send_to_pads ? ` and sent to pads from ${padLabel(bank * PAD_COUNT)}` : ''}`);
     }
 
     case 'erase': {
       const needsPad = ['pad_steps', 'pad_recorded', 'pad'].includes(a.target);
-      if (needsPad && !isPad(a.pad)) return fail('This target needs pad: an integer 1-16.');
+      if (needsPad && !isPad(a.pad)) return fail(`This target needs pad: ${BAD_PAD}.`);
+      const ix = needsPad ? padIx(a.pad) : -1;
       switch (a.target) {
         case 'all_steps': run('seq.clearAll', {}); return ok('Done.', 'Cleared all step patterns');
         case 'all_recorded': run('loop.clear', {}); return ok('Done.', 'Erased all recorded hits');
-        case 'pad_steps': run('seq.setRow', { pad: a.pad - 1, steps: [] }); return ok('Done.', `Cleared steps on pad ${a.pad}`);
-        case 'pad_recorded': run('loop.clearPad', { pad: a.pad - 1 }); return ok('Done.', `Erased recorded hits on pad ${a.pad}`);
-        case 'pad': run('pad.clear', { pad: a.pad - 1 }); return ok('Done.', `Emptied pad ${a.pad}`);
+        case 'pad_steps': run('seq.setRow', { pad: ix, steps: [] }); return ok('Done.', `Cleared steps on pad ${padLabel(ix)}`);
+        case 'pad_recorded': run('loop.clearPad', { pad: ix }); return ok('Done.', `Erased recorded hits on pad ${padLabel(ix)}`);
+        case 'pad': run('pad.clear', { pad: ix }); return ok('Done.', `Emptied pad ${padLabel(ix)}`);
         default: return fail('Unknown erase target.');
       }
     }

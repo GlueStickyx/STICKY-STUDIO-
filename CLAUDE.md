@@ -31,9 +31,11 @@ toward a full studio. A desktop build with real VST hosting is the long-term goa
 ## Build order
 
 Done: import, chop (manual + transient + grid), 16 pads, pad edit, loop recording of pad hits,
-step sequencer, undo/redo, autosave, WAV export, AI assistant (Claude, owner's own API key).
+step sequencer, undo/redo, autosave, WAV export, AI assistant (Claude: own API key on the web build, viewer's account in the artifact build),
 
-Next, one slice at a time: mic sampling and pad banks →
+four pad banks (A-D, 64 pads; assistant addresses pads as "A1".."D16").
+
+Next, one slice at a time: mic sampling (GitHub Pages build only; artifact pages have no microphone) →
 piano roll and MIDI → FX/mutation lab → Suno studio tab → stems → clip launcher and arrangement →
 knowledge library and local-model/MCP connections for the assistant → workflow canvas →
 desktop shell with plugin hosting.

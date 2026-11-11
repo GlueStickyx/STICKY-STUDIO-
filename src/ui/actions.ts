@@ -6,7 +6,7 @@ import { zipSingle } from '../audio/zip';
 import { useDownloads } from '../ai/viewer';
 import { dispatch, getProject, loadProject, subscribe } from '../core/bus';
 import { loadAudio, loadSavedProject, requestPersistence, saveAudio, saveProject } from '../core/storage';
-import { emptyProject, uid } from '../core/types';
+import { emptyProject, normalizeProject, uid } from '../core/types';
 import type { Sample } from '../core/types';
 
 export function monoOf(id: string): { mono: Float32Array; sampleRate: number } | null {
@@ -84,11 +84,11 @@ export async function boot(): Promise<void> {
       try { engine.addBuffer(s.id, await engine.decode(bytes)); kept.push(s); } catch { /* skip unreadable audio */ }
     }
     const ids = new Set(kept.map((s) => s.id));
-    loadProject({
+    loadProject(normalizeProject({
       ...emptyProject(), ...saved, samples: kept,
       activeSampleId: saved.activeSampleId && ids.has(saved.activeSampleId) ? saved.activeSampleId : (kept[0]?.id ?? null),
       pads: saved.pads.map((p) => (p.sampleId && !ids.has(p.sampleId) ? { ...p, sampleId: null } : p)),
-    });
+    }));
   } else {
     await seedDemo();
     loadProject(getProject()); // the demo is the starting point, not something to undo

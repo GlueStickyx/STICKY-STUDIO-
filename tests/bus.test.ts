@@ -370,18 +370,40 @@ describe('pad commands', () => {
     expect(pads[1].sampleId).toBeNull();
   });
 
-  it('pads.assignSlices uses only the first 16 of many slices', () => {
+  it('pads.assignSlices spills past 16 slices into the next bank', () => {
     const m = Array.from({ length: 24 }, (_, i) => (i + 1) * 0.1); // 25 slices
     dispatch('sample.add', { sample: sample('s1', 2.5, m) });
     dispatch('pads.assignSlices', { sampleId: 's1' });
     const pads = getProject().pads;
-    expect(pads).toHaveLength(16);
-    pads.forEach((pad, i) => {
+    expect(pads).toHaveLength(64);
+    pads.slice(0, 25).forEach((pad, i) => {
       expect(pad.sampleId).toBe('s1');
       expect(pad.start).toBeCloseTo(i * 0.1, 9);
       expect(pad.end).toBeCloseTo((i + 1) * 0.1, 9);
     });
-    for (let i = 0; i < 15; i++) expect(pads[i].end).toBe(pads[i + 1].start);
+    expect(pads[25].sampleId).toBeNull();
+    for (let i = 0; i < 24; i++) expect(pads[i].end).toBe(pads[i + 1].start);
+  });
+
+  it('pads.assignSlices starts at the bank on screen and stops at the last pad', () => {
+    const m = Array.from({ length: 39 }, (_, i) => (i + 1) * 0.1); // 40 slices
+    dispatch('sample.add', { sample: sample('s1', 4, m) });
+    dispatch('bank.select', { bank: 2 });
+    dispatch('pads.assignSlices', { sampleId: 's1' });
+    const pads = getProject().pads;
+    expect(pads[31].sampleId).toBeNull();
+    expect(pads[32].start).toBe(0);
+    expect(pads[63].sampleId).toBe('s1'); // 32 pads available from bank C; the other 8 slices do not fit
+    expect(pads[63].end).toBeCloseTo(3.2, 9);
+  });
+
+  it('bank.select keeps the pad position and is not an undo step', () => {
+    dispatch('pad.select', { pad: 5 });
+    dispatch('bank.select', { bank: 3 });
+    expect(getProject().selectedPad).toBe(53);
+    dispatch('bank.select', { bank: 9 });
+    expect(getProject().selectedPad).toBe(53);
+    expect(canUndo()).toBe(false);
   });
 
   it('pads.assignSlices resets gain/pitch/reverse but keeps steps', () => {
@@ -432,9 +454,9 @@ describe('pad commands', () => {
     expect(getProject().pads[1].sampleId).toBe('s1');
   });
 
-  it('pad.select clamps to the 16 pads', () => {
+  it('pad.select clamps to the 64 pads', () => {
     dispatch('pad.select', { pad: 99 });
-    expect(getProject().selectedPad).toBe(15);
+    expect(getProject().selectedPad).toBe(63);
     dispatch('pad.select', { pad: -3 });
     expect(getProject().selectedPad).toBe(0);
   });

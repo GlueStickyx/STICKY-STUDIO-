@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { engine } from '../audio/engine';
 import { canRedo, canUndo, dispatch, getProject, redo, subscribe, undo } from '../core/bus';
 import { loopTicks } from '../core/sequence';
-import { BAR_TICKS, PPQ, STEP_TICKS, sliceBounds } from '../core/types';
+import { BANK_COUNT, BANK_NAMES, BAR_TICKS, PAD_COUNT, PPQ, STEP_TICKS, TOTAL_PADS, bankOf, padLabel, sliceBounds } from '../core/types';
 import type { Project } from '../core/types';
 import { autoSlice, boot, exportLoopWav, gridSlice, importFile, onSaveState, saveState } from './actions';
 import { padHue } from './colors';
@@ -76,7 +76,7 @@ function Studio() {
         <div className="side">
           <div className="tabs" role="tablist">
             <button role="tab" aria-selected={panel === 'steps'} className={panel === 'steps' ? 'tab on' : 'tab'} onClick={() => setPanel('steps')}>Steps</button>
-            <button role="tab" aria-selected={panel === 'pad'} className={panel === 'pad' ? 'tab on' : 'tab'} onClick={() => setPanel('pad')}>Pad {p.selectedPad + 1}</button>
+            <button role="tab" aria-selected={panel === 'pad'} className={panel === 'pad' ? 'tab on' : 'tab'} onClick={() => setPanel('pad')}>Pad {padLabel(p.selectedPad)}</button>
           </div>
           {panel === 'steps' ? <Steps p={p} /> : <PadEdit p={p} />}
         </div>
@@ -146,6 +146,7 @@ function ChopBar({ p, tool, setTool, say }: { p: Project; tool: Tool; setTool: (
   const [busy, setBusy] = useState(false);
   const s = p.samples.find((x) => x.id === p.activeSampleId);
   const slices = s ? s.markers.length + 1 : 0;
+  const room = TOTAL_PADS - bankOf(p.selectedPad) * PAD_COUNT; // pads from the bank on screen to the last bank
   return (
     <div className="chopbar">
       <div className="group">
@@ -182,7 +183,7 @@ function ChopBar({ p, tool, setTool, say }: { p: Project; tool: Tool; setTool: (
             <button className="btn" disabled={!s.markers.length} onClick={() => dispatch('sample.setMarkers', { id: s.id, markers: [] })}>Clear cuts</button>
           </div>
           <div className="group end">
-            <span className="meta">{slices} {slices === 1 ? 'slice' : 'slices'}{slices > 16 ? ' · first 16 go to pads' : ''}</span>
+            <span className="meta">{slices} {slices === 1 ? 'slice' : 'slices'}{slices > room ? ` · first ${room} fit from bank ${BANK_NAMES[bankOf(p.selectedPad)]}` : slices > PAD_COUNT ? ' · spills into the next bank' : ''}</span>
             <button id="topads" className="btn primary" onClick={() => dispatch('pads.assignSlices', { sampleId: s.id })}>Send to pads</button>
           </div>
         </>
@@ -210,27 +211,40 @@ function Pads({ p }: { p: Project }) {
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || el?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el?.tagName ?? '')) return;
       if (e.key === ' ') { e.preventDefault(); engine.playing ? engine.stop() : engine.play(); return; }
       const i = KEYS.indexOf(e.key.toLowerCase());
-      if (i >= 0) { engine.hitPad(i); dispatch('pad.select', { pad: i }); }
+      if (i >= 0) { const pad = bankOf(getProject().selectedPad) * PAD_COUNT + i; engine.hitPad(pad); dispatch('pad.select', { pad }); }
     };
     window.addEventListener('keydown', key);
     return () => { window.removeEventListener('keydown', key); engine.onPadFire = () => {}; };
   }, []);
   // MPC order: pad 1 bottom-left, pad 16 top-right.
   const order = [12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3];
+  const bank = bankOf(p.selectedPad);
   return (
+    <div className="padwrap">
+    <div className="banks" role="radiogroup" aria-label="Pad bank">
+      {Array.from({ length: BANK_COUNT }, (_, b) => {
+        const used = p.pads.slice(b * PAD_COUNT, (b + 1) * PAD_COUNT).filter((x) => x.sampleId).length;
+        return (
+          <button key={b} id={`bank-${b}`} role="radio" aria-checked={bank === b} className={`btn bank${bank === b ? ' on' : ''}${used ? ' used' : ''}`}
+            aria-label={`Bank ${BANK_NAMES[b]}, ${used} of ${PAD_COUNT} pads loaded`} onClick={() => dispatch('bank.select', { bank: b })}>{BANK_NAMES[b]}</button>
+        );
+      })}
+    </div>
     <div className="pads">
-      {order.map((i) => {
+      {order.map((local) => {
+        const i = bank * PAD_COUNT + local;
         const pad = p.pads[i];
         return (
-          <button key={i} ref={(el) => { refs.current[i] = el; }} id={`pad-${i}`}
+          <button key={i} ref={(el) => { refs.current[i] = el; }} id={`pad-${local}`}
             className={`pad${pad.sampleId ? ' loaded' : ''}${p.selectedPad === i ? ' sel' : ''}`}
-            style={{ ['--hue' as any]: padHue(i) }}
-            aria-label={`Pad ${i + 1}${pad.sampleId ? '' : ', empty'}`}
+            style={{ ['--hue' as any]: padHue(local) }}
+            aria-label={`Pad ${padLabel(i)}${pad.sampleId ? '' : ', empty'}`}
             onPointerDown={(e) => { e.preventDefault(); engine.hitPad(i); dispatch('pad.select', { pad: i }); }}>
-            <span>{i + 1}</span>
+            <span>{padLabel(i)}</span>
           </button>
         );
       })}
+    </div>
     </div>
   );
 }
@@ -241,8 +255,8 @@ function Steps({ p }: { p: Project }) {
   const recorded = p.events.filter((e) => e.pad === i).length;
   return (
     <div className="panel">
-      <p className="panel-title">Pad {i + 1} pattern{!pad.sampleId && <em> · empty pad, send a slice to it first</em>}</p>
-      <div className="steps" style={{ ['--hue' as any]: padHue(i) }}>
+      <p className="panel-title">Pad {padLabel(i)} pattern{!pad.sampleId && <em> · empty pad, send a slice to it first</em>}</p>
+      <div className="steps" style={{ ['--hue' as any]: padHue(i % PAD_COUNT) }}>
         {pad.steps.map((v, s) => (
           <button key={s} id={`step-${s}`} aria-label={`Step ${s + 1} ${v > 0 ? (v < 1 ? 'soft' : 'on') : 'off'}`}
             className={`step${v >= 1 ? ' on' : v > 0 ? ' soft' : ''}${cur === s ? ' cur' : ''}${s % 4 === 0 ? ' beat' : ''}`}
@@ -264,13 +278,13 @@ function Steps({ p }: { p: Project }) {
 function PadEdit({ p }: { p: Project }) {
   const i = p.selectedPad, pad = p.pads[i];
   const s = p.samples.find((x) => x.id === pad.sampleId);
-  if (!s) return <div className="panel"><p className="panel-title">Pad {i + 1} is empty</p><p className="hint">Slice a sample and press Send to pads.</p></div>;
+  if (!s) return <div className="panel"><p className="panel-title">Pad {padLabel(i)} is empty</p><p className="hint">Slice a sample and press Send to pads.</p></div>;
   const set = (patch: object, group: string) => dispatch('pad.set', { pad: i, ...patch }, { group: `${group}-${i}` });
   const b = sliceBounds(s);
   const slice = b.findIndex((v, k) => k < b.length - 1 && Math.abs(v - pad.start) < 0.001 && Math.abs(b[k + 1] - pad.end) < 0.001);
   return (
     <div className="panel">
-      <p className="panel-title">Pad {i + 1} · {s.name} · {(pad.end - pad.start).toFixed(2)} s</p>
+      <p className="panel-title">Pad {padLabel(i)} · {s.name} · {(pad.end - pad.start).toFixed(2)} s</p>
       <label className="slider">Volume <span>{Math.round(pad.gain * 100)}%</span>
         <input id="pad-gain" type="range" min={0} max={1.5} step={0.01} value={pad.gain} onChange={(e) => set({ gain: Number(e.target.value) }, 'gain')} /></label>
       <label className="slider">Pitch <span>{pad.semitones > 0 ? '+' : ''}{pad.semitones} st</span>

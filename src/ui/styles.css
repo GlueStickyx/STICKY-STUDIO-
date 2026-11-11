@@ -84,9 +84,13 @@ input[type="range"] { accent-color: var(--accent); min-height: 32px; touch-actio
 .empty { flex: 1; display: grid; place-items: center; color: var(--dim); background: var(--surface); border-radius: var(--radius); }
 
 .perform { display: flex; gap: 12px; align-items: stretch; min-height: 0; }
+.padwrap { display: flex; gap: 8px; flex: none; }
+.banks { display: flex; flex-direction: column; gap: 8px; }
+.btn.bank { flex: 1; min-width: 44px; padding: 0; font: 600 15px var(--mono); position: relative; }
+.btn.bank.used::after { content: ""; position: absolute; right: 6px; top: 6px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .pads {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
-  width: min(46vh, 48vw); aspect-ratio: 1; flex: none;
+  width: min(46vh, 44vw); aspect-ratio: 1; flex: none;
 }
 .pad {
   --hue: 0; position: relative; border-radius: 10px; border: 1px solid var(--line); background: var(--surface);
@@ -153,7 +157,9 @@ input[type="range"] { accent-color: var(--accent); min-height: 32px; touch-actio
   .studio { height: auto; grid-template-rows: auto auto auto; }
   .wave-canvas { min-height: 170px; }
   .perform { flex-direction: column; }
-  .pads { width: min(100%, 520px); margin: 0 auto; }
+  .padwrap { flex-direction: column; align-items: center; }
+  .banks { flex-direction: row; width: min(100%, 520px); }
+  .pads { width: min(100%, 520px); }
   .group.end { margin-left: 0; }
   .studio.with-chat { padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-bottom: 62vh; }
   .chat { top: auto; left: 0; width: auto; height: 60vh; border-left: 0; border-top: 1px solid var(--line); padding-left: max(10px, env(safe-area-inset-left, 0px)); }
