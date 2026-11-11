@@ -24,6 +24,8 @@ toward a full studio. A desktop build with real VST hosting is the long-term goa
 
 - `npm run dev` — local dev server
 - `npm test` — unit tests
+- `npm run build:artifact` — single-file build for publishing as a Claude artifact (assistant runs
+  on the viewer's Claude account via `src/ai/viewer.ts`, no API key)
 - `npm run build && npm run e2e` — production build, then browser checks (needs Playwright)
 
 ## Build order

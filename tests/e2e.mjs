@@ -168,6 +168,54 @@ try {
   check('phone width has no sideways scroll', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   if (shots) await page.screenshot({ path: `${shots}/phone.png`, fullPage: true });
 
+  // The single-file artifact build, opened the way the Claude app opens it: with a `window.claude` runtime.
+  // The runtime here is a stand-in that plays Claude's part: it calls one page tool, then writes a sentence.
+  if (fs.existsSync('artifact/sticky-studio.html')) {
+    const apage = await ctx.newPage();
+    apage.on('pageerror', (e) => errors.push('artifact: ' + String(e)));
+    const fragment = fs.readFileSync('artifact/sticky-studio.html', 'utf8');
+    await apage.route('http://localhost:4317/artifact-test.html', (r) => r.fulfill({ contentType: 'text/html',
+      body: `<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>${fragment}</body></html>` }));
+    await apage.addInitScript(() => {
+      window.__saved = []; window.__asked = [];
+      const sample = async (input, opts) => {
+        window.__asked.push(input);
+        const tool = opts.tools.find((t) => t.name === 'write_patterns');
+        let bad = '';
+        try { await tool.execute({ patterns: [{ pad: 99, steps: [] }] }); } catch (e) { bad = String(e.message); }
+        window.__badInput = bad;
+        await tool.execute({ patterns: [{ pad: 4, steps: [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0] }] });
+        opts.onText({ text: 'Kick pattern on pad 4.', delta: 'Kick pattern on pad 4.' });
+        return { text: 'Kick pattern on pad 4.', truncated: false };
+      };
+      window.claude = { use: async (name) => (name === 'sample' ? sample : name === 'downloads'
+        ? { save: async (r) => { window.__saved.push({ filename: r.filename, bytes: Array.from(new Uint8Array(await r.data.arrayBuffer())) }); return { status: 'saved' }; } } : null) };
+    });
+    await apage.goto('http://localhost:4317/artifact-test.html');
+    await apage.click('#start');
+    await apage.waitForSelector('.pads');
+    check('artifact build boots with the demo on the pads', await apage.locator('.pad.loaded').count() === 16);
+    await apage.click('#assistant');
+    await apage.waitForSelector('#chat-input');
+    check('artifact assistant needs no API key', await apage.locator('#api-key').count() === 0);
+    await apage.fill('#chat-input', 'kick on pad 4');
+    await apage.click('#chat-send');
+    await apage.waitForSelector('.msg.assistant:has-text("Kick pattern on pad 4")');
+    check('artifact assistant writes into the studio', await apage.locator('.change:has-text("Wrote patterns for pad 4")').count() === 1);
+    check('bad tool input is reported back to Claude, not applied', (await apage.evaluate(() => window.__badInput)).includes('integer 1-16'));
+    const asked = await apage.evaluate(() => window.__asked[0]);
+    check('artifact request starts with the instructions and ends with the message', asked.length === 2 && asked[0].content.includes('Sticky Studio') && asked[1].content === 'kick on pad 4');
+    await apage.click('text=Undo these changes');
+    await apage.click('#chat-close');
+    await apage.click('#export');
+    await apage.waitForFunction(() => window.__saved.length === 1);
+    const saved = await apage.evaluate(() => window.__saved[0]);
+    fs.writeFileSync('/tmp/sticky-export-test.zip', Buffer.from(saved.bytes));
+    check('artifact export hands a zip to the host', saved.filename.endsWith('.zip') && saved.bytes[0] === 0x50 && saved.bytes[1] === 0x4b, saved.filename);
+    if (shots) await apage.screenshot({ path: `${shots}/artifact.png` });
+    await apage.close();
+  }
+
   check('no console errors', errors.filter((e) => !e.includes('Unable to decode') && !e.includes('401')).length === 0, errors.join(' | '));
 } finally {
   await browser.close();

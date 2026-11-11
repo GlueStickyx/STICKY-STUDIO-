@@ -2,6 +2,8 @@
 import { engine } from '../audio/engine';
 import { detectTransients, estimateBpm, mixToMono } from '../audio/analysis';
 import { encodeWav, synthDemoLoop } from '../audio/wav';
+import { zipSingle } from '../audio/zip';
+import { useDownloads } from '../ai/viewer';
 import { dispatch, getProject, loadProject, subscribe } from '../core/bus';
 import { loadAudio, loadSavedProject, requestPersistence, saveAudio, saveProject } from '../core/storage';
 import { emptyProject, uid } from '../core/types';
@@ -99,15 +101,24 @@ export async function boot(): Promise<void> {
   setSaveState((await saveProject(getProject())) ? 'saved' : 'off');
 }
 
-export async function exportLoopWav(): Promise<void> {
+/** Render the loop and hand it to the user. Returns a sentence describing what happened. */
+export async function exportLoopWav(): Promise<string> {
   const ch = await engine.renderLoop(44100);
-  const blob = new Blob([encodeWav(ch, 44100)], { type: 'audio/wav' });
+  const wav = encodeWav(ch, 44100);
   const p = getProject();
+  const name = `sticky-loop-${p.bars}bar-${Math.round(p.bpm)}bpm`;
+  const downloads = await useDownloads();
+  if (downloads) {
+    // Inside the Claude app a page may only save certain file types, so the WAV travels in a zip.
+    try { await downloads.save({ filename: `${name}.zip`, data: new Blob([zipSingle(`${name}.wav`, wav)]) }); return 'Loop saved as a zip with the WAV inside.'; }
+    catch (e) { return (e as { code?: string })?.code === 'declined' ? 'Save cancelled.' : 'Saving is not available in this view.'; }
+  }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `sticky-loop-${p.bars}bar-${Math.round(p.bpm)}bpm.wav`;
+  a.href = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
+  a.download = `${name}.wav`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  return 'Loop saved as a WAV file.';
 }

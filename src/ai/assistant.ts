@@ -41,6 +41,8 @@ export interface TurnCallbacks {
   onChange: (label: string) => void;
 }
 export interface TurnResult { group: string; changed: boolean; note: string | null }
+/** Anything that can hold the conversation: Claude through an API key, or the Claude app the page is opened in. */
+export interface ChatBackend { send(text: string, cb: TurnCallbacks): Promise<TurnResult>; stop(): void; reset(): void }
 
 /** Turn an API failure into a sentence the user can act on. */
 export function explainError(e: unknown): string {
@@ -55,7 +57,7 @@ export function explainError(e: unknown): string {
   return 'Something went wrong while talking to the assistant.';
 }
 
-export class Assistant {
+export class Assistant implements ChatBackend {
   private messages: Anthropic.Beta.BetaMessageParam[] = [];
   private abort: AbortController | null = null;
   constructor(private deps: StudioDeps) {}

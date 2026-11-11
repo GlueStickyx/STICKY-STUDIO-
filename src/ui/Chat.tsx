@@ -1,6 +1,9 @@
 // Assistant panel: a slide-over sheet with the conversation, key setup, and one-tap undo of the assistant's changes.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Assistant, explainError, getKey, setKey } from '../ai/assistant';
+import type { ChatBackend, TurnCallbacks } from '../ai/assistant';
+import type { StudioDeps } from '../ai/tools';
+import { ViewerAssistant, explainViewerError, inArtifact, useSample } from '../ai/viewer';
 import { engine } from '../audio/engine';
 import { getProject, lastGroup, subscribe, undo } from '../core/bus';
 import { monoOf } from './actions';
@@ -16,11 +19,24 @@ const STARTERS = [
 
 export function Chat({ onClose }: { onClose: () => void }) {
   useSyncExternalStore(subscribe, getProject); // re-render when the project changes, so the undo button stays honest
-  const assistant = useMemo(() => new Assistant({
+  const deps = useMemo<StudioDeps>(() => ({
     audio: monoOf,
     isPlaying: () => engine.playing,
     setPlaying: (on) => (on ? engine.play() : engine.stop()),
   }), []);
+  // Inside a Claude artifact the app answers on the viewer's own account; anywhere else an API key is needed.
+  const [mode, setMode] = useState<'checking' | 'viewer' | 'key'>(inArtifact() ? 'checking' : 'key');
+  const backend = useRef<ChatBackend>(new Assistant(deps));
+  useEffect(() => {
+    if (mode !== 'checking') return;
+    let live = true;
+    useSample().then((sample) => {
+      if (!live) return;
+      if (sample) { backend.current = new ViewerAssistant(sample, deps); setMode('viewer'); } else setMode('key');
+    });
+    return () => { live = false; };
+  }, []); // eslint-disable-line
+  const assistant = { send: (t: string, cb: TurnCallbacks) => backend.current.send(t, cb), stop: () => backend.current.stop(), reset: () => backend.current.reset() };
   const [items, setItems] = useState<Item[]>([]);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState('');
@@ -46,7 +62,7 @@ export function Chat({ onClose }: { onClose: () => void }) {
       patchLast((it) => ({ ...it, text: (it.text.trim() + (r.note ? `\n${r.note}` : '')).trim(), group: r.changed ? r.group : undefined }));
     } catch (e) {
       patchLast((it) => ({ ...it, text: it.text.trim() }));
-      setItems((l) => [...l.filter((it, i) => !(i === l.length - 1 && !it.text && !it.changes.length)), { role: 'error', text: explainError(e), changes: [] }]);
+      setItems((l) => [...l.filter((it, i) => !(i === l.length - 1 && !it.text && !it.changes.length)), { role: 'error', text: explainViewerError(e) ?? explainError(e), changes: [] }]);
     }
     setBusy(false);
   };
@@ -62,13 +78,15 @@ export function Chat({ onClose }: { onClose: () => void }) {
       <div className="chat-head">
         <strong>Assistant</strong>
         <div className="group">
-          {key && <button className="btn small" onClick={() => setEditKey(!editKey)}>Key</button>}
+          {mode === 'key' && key && <button className="btn small" onClick={() => setEditKey(!editKey)}>Key</button>}
           {items.length > 0 && !busy && <button className="btn small" onClick={() => { assistant.reset(); setItems([]); }}>New chat</button>}
           <button id="chat-close" className="btn small" aria-label="Close assistant" onClick={onClose}>Close</button>
         </div>
       </div>
 
-      {(!key || editKey) ? (
+      {mode === 'checking' ? (
+        <p className="hint">Connecting to Claude…</p>
+      ) : mode === 'key' && (!key || editKey) ? (
         <div className="chat-key">
           <p>The assistant runs on Claude through your own Anthropic API key. Create one at console.anthropic.com under API keys; usage is billed to that account.</p>
           <label htmlFor="api-key">Anthropic API key</label>
@@ -84,6 +102,7 @@ export function Chat({ onClose }: { onClose: () => void }) {
           <div className="chat-log" ref={log}>
             {items.length === 0 && (
               <div className="chat-empty">
+                {mode === 'viewer' && <p>Runs on your own Claude account. The first message asks your permission.</p>}
                 <p>Ask for a beat, a variation, or advice. It can read your pads and change the studio; every change it makes can be undone in one tap.</p>
                 {STARTERS.map((s) => <button key={s} className="btn starter" onClick={() => send(s)}>{s}</button>)}
               </div>
