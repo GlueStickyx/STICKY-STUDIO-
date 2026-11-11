@@ -1,7 +1,7 @@
 // The command bus. Every change to the project goes through dispatch(): the UI, undo/redo,
 // autosave and (later) the AI assistant all use this one entry point.
-import { BANK_COUNT, BAR_TICKS, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, defaultFx, emptyPad, emptyProject, sliceBounds } from './types';
-import type { LoopEvent, Pad, PadFx, Project, Sample } from './types';
+import { PITCH_MAX, PITCH_MIN, SCALES, BANK_COUNT, BAR_TICKS, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, defaultFx, emptyPad, emptyProject, sliceBounds } from './types';
+import type { LoopEvent, Note, Pad, PadFx, Project, Sample } from './types';
 
 type Handler = (p: Project, args: any) => Project;
 interface CommandDef { run: Handler; undoable: boolean; describe: string }
@@ -19,7 +19,7 @@ export const commands: Record<string, CommandDef> = {
   'project.setSwing': { undoable: true, describe: 'Set swing 0-0.6', run: (p, a) => ({ ...p, swing: clamp(a.swing, 0, 0.6) }) },
   'project.setBars': {
     undoable: true, describe: 'Set loop length to 1, 2 or 4 bars',
-    run: (p, a) => ({ ...p, bars: a.bars, events: p.events.filter((e) => e.tick < a.bars * BAR_TICKS) }),
+    run: (p, a) => ({ ...p, bars: a.bars, events: p.events.filter((e) => e.tick < a.bars * BAR_TICKS), notes: fitNotes(p.notes, a.bars * BAR_TICKS) }),
   },
   'project.setQuantize': { undoable: false, describe: 'Set record quantize in ticks (0 = off)', run: (p, a) => ({ ...p, quantize: a.ticks }) },
   'project.setMetronome': { undoable: false, describe: 'Turn the metronome on or off', run: (p, a) => ({ ...p, metronome: !!a.on }) },
@@ -92,7 +92,7 @@ export const commands: Record<string, CommandDef> = {
     }),
   },
   'pad.resetFx': { undoable: true, describe: 'Remove all effects from one pad', run: (p, a) => mapPad(p, a.pad, (pad) => ({ ...pad, fx: defaultFx() })) },
-  'pad.clear': { undoable: true, describe: 'Empty a pad and its steps and recorded hits', run: (p, a) => ({ ...mapPad(p, a.pad, () => emptyPad()), events: p.events.filter((e) => e.pad !== a.pad) }) },
+  'pad.clear': { undoable: true, describe: 'Empty a pad and its steps and recorded hits', run: (p, a) => ({ ...mapPad(p, a.pad, () => emptyPad()), events: p.events.filter((e) => e.pad !== a.pad), notes: p.notes.filter((n) => n.pad !== a.pad) }) },
   'pad.select': { undoable: false, describe: 'Select a pad for editing', run: (p, a) => ({ ...p, selectedPad: clamp(a.pad, 0, TOTAL_PADS - 1) }) },
   'bank.select': { undoable: false, describe: 'Show pad bank 0-3 (A-D)', run: (p, a) => ({ ...p, selectedPad: clamp(a.bank, 0, BANK_COUNT - 1) * PAD_COUNT + (p.selectedPad % PAD_COUNT) }) },
 
@@ -104,10 +104,33 @@ export const commands: Record<string, CommandDef> = {
   'seq.setRow': { undoable: true, describe: 'Replace all 16 steps of a pad', run: (p, a) => mapPad(p, a.pad, (pad) => ({ ...pad, steps: Array.from({ length: STEP_COUNT }, (_, i) => clamp(a.steps[i] ?? 0, 0, 1)) })) },
   'seq.clearAll': { undoable: true, describe: 'Clear every step on every pad', run: (p) => ({ ...p, pads: p.pads.map((pad) => ({ ...pad, steps: new Array(STEP_COUNT).fill(0) })) }) },
 
+  'note.add': { undoable: true, describe: 'Add one piano-roll note', run: (p, a) => { const n = cleanNote(a.note, p.bars * BAR_TICKS); return n ? { ...p, notes: [...p.notes, n] } : p; } },
+  'note.remove': { undoable: true, describe: 'Remove one piano-roll note by id', run: (p, a) => (p.notes.some((n) => n.id === a.id) ? { ...p, notes: p.notes.filter((n) => n.id !== a.id) } : p) },
+  'notes.set': {
+    undoable: true, describe: 'Replace every piano-roll note of one pad',
+    run: (p, a) => ({ ...p, notes: [...p.notes.filter((n) => n.pad !== a.pad), ...(a.notes as Note[]).map((n) => cleanNote({ ...n, pad: a.pad }, p.bars * BAR_TICKS)).filter((n): n is Note => !!n)] }),
+  },
+  'notes.clearPad': { undoable: true, describe: 'Erase the piano-roll notes of one pad', run: (p, a) => (p.notes.some((n) => n.pad === a.pad) ? { ...p, notes: p.notes.filter((n) => n.pad !== a.pad) } : p) },
+  'project.setScale': {
+    undoable: false, describe: 'Set the piano-roll scale and the note name of a pad\'s own pitch',
+    run: (p, a) => ({ ...p, scale: a.scale in SCALES ? a.scale : p.scale, root: Number.isInteger(a.root) ? clamp(a.root, 0, 11) : p.root }),
+  },
   'loop.addEvent': { undoable: true, describe: 'Record one pad hit into the loop', run: (p, a) => ({ ...p, events: [...p.events, a.event as LoopEvent] }) },
   'loop.clearPad': { undoable: true, describe: 'Erase recorded hits of one pad', run: (p, a) => ({ ...p, events: p.events.filter((e) => e.pad !== a.pad) }) },
   'loop.clear': { undoable: true, describe: 'Erase all recorded hits', run: (p) => ({ ...p, events: [] }) },
 };
+
+/** Validate a note against the loop: inside the loop, in pitch range, at least one tick long. */
+function cleanNote(n: Note, loop: number): Note | null {
+  if (!n || ![n.tick, n.len, n.pitch].every((v) => typeof v === 'number' && Number.isFinite(v))) return null;
+  const tick = Math.round(n.tick);
+  if (tick < 0 || tick >= loop || !Number.isInteger(n.pad) || n.pad < 0 || n.pad >= TOTAL_PADS) return null;
+  return {
+    id: String(n.id), pad: n.pad, tick, len: clamp(Math.round(n.len), 1, loop - tick),
+    pitch: clamp(Math.round(n.pitch), PITCH_MIN, PITCH_MAX), vel: clamp(typeof n.vel === 'number' ? n.vel : 1, 0.05, 1),
+  };
+}
+const fitNotes = (notes: Note[], loop: number) => notes.filter((n) => n.tick < loop).map((n) => ({ ...n, len: Math.min(n.len, loop - n.tick) }));
 
 let state: Project = emptyProject();
 let past: Project[] = [];
@@ -146,7 +169,7 @@ export function dispatch(name: string, args: any = {}, opts: { group?: string; s
 /** Settings that are not undoable stay as they are when history moves. */
 function keepSettings(target: Project): Project {
   const active = target.samples.some((s) => s.id === state.activeSampleId) ? state.activeSampleId : target.activeSampleId;
-  return { ...target, selectedPad: state.selectedPad, metronome: state.metronome, quantize: state.quantize, activeSampleId: active };
+  return { ...target, selectedPad: state.selectedPad, metronome: state.metronome, quantize: state.quantize, activeSampleId: active, scale: state.scale, root: state.root };
 }
 export function undo() { const prev = past.pop(); if (!prev) return; future.push(state); state = keepSettings(prev); lastKey = ''; emit(); }
 export function redo() { const next = future.pop(); if (!next) return; past.push(state); state = keepSettings(next); lastKey = ''; emit(); }

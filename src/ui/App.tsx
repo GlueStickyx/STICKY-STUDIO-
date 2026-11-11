@@ -5,7 +5,11 @@ import { loopTicks } from '../core/sequence';
 import { BANK_COUNT, BANK_NAMES, BAR_TICKS, PAD_COUNT, PPQ, STEP_TICKS, TOTAL_PADS, bankOf, padLabel, sliceBounds } from '../core/types';
 import { DELAY_TIMES, STUTTERS, fxActive } from '../core/types';
 import type { FilterType, PadFx, Project } from '../core/types';
-import { autoSlice, boot, exportLoopWav, gridSlice, importFile, onSaveState, resamplePad, saveState } from './actions';
+import { connectMidi, midiSupported, setMidiMode } from '../audio/midiin';
+import { NOTE_NAMES, SCALES } from '../core/types';
+import type { ScaleName } from '../core/types';
+import { autoSlice, boot, exportLoopWav, exportMidi, gridSlice, importFile, importMidi, onSaveState, resamplePad, saveState } from './actions';
+import { PianoRoll } from './PianoRoll';
 import { padHue } from './colors';
 import { inArtifact } from '../ai/viewer';
 import { Chat } from './Chat';
@@ -51,6 +55,9 @@ function Studio() {
   const [panel, setPanel] = useState<'steps' | 'pad' | 'fx'>('steps');
   const [msg, setMsg] = useState<string | null>(null);
   const [chat, setChat] = useState(false);
+  const [view, setView] = useState<'chop' | 'roll'>('chop');
+  const [noteLen, setNoteLen] = useState(STEP_TICKS * 2);
+  useEffect(() => { setMidiMode(view === 'roll' ? 'keys' : 'pads'); }, [view]);
   useEffect(() => { if (!msg) return; const t = setTimeout(() => setMsg(null), 4000); return () => clearTimeout(t); }, [msg]);
   useEffect(() => { engine.onTransport = () => force((n) => n + 1); return onSaveState(() => force((n) => n + 1)); }, []);
   useEffect(() => { // keep the screen awake while the studio is open, where the browser allows it
@@ -68,9 +75,19 @@ function Studio() {
       <Transport p={p} say={setMsg} chat={chat} toggleChat={() => setChat(!chat)} />
       {msg && <div className="toast" role="status" onClick={() => setMsg(null)}>{msg}</div>}
       <section className="chop">
-        <ChopBar p={p} tool={tool} setTool={setTool} say={setMsg} />
-        {sample ? <Waveform sample={sample} project={p} tool={tool} />
-          : <div className="empty">Import a WAV or MP3 to start chopping.</div>}
+        {view === 'chop' ? (
+          <>
+            <ChopBar p={p} tool={tool} setTool={setTool} say={setMsg} switcher={<ViewSwitch view={view} setView={setView} />} />
+            {sample ? <Waveform sample={sample} project={p} tool={tool} />
+              : <div className="empty">Import a WAV or MP3 to start chopping.</div>}
+          </>
+        ) : (
+          <>
+            <RollBar p={p} say={setMsg} noteLen={noteLen} setNoteLen={setNoteLen} switcher={<ViewSwitch view={view} setView={setView} />} />
+            {p.pads[p.selectedPad].sampleId ? <PianoRoll p={p} noteLen={noteLen} />
+              : <div className="empty">Pad {padLabel(p.selectedPad)} is empty. Pick a pad with a sound to play it as an instrument.</div>}
+          </>
+        )}
       </section>
       <section className="perform">
         <Pads p={p} />
@@ -142,7 +159,7 @@ function Transport({ p, say, chat, toggleChat }: { p: Project; say: (m: string |
   );
 }
 
-function ChopBar({ p, tool, setTool, say }: { p: Project; tool: Tool; setTool: (t: Tool) => void; say: (m: string | null) => void }) {
+function ChopBar({ p, tool, setTool, say, switcher }: { p: Project; tool: Tool; setTool: (t: Tool) => void; say: (m: string | null) => void; switcher: React.ReactNode }) {
   const file = useRef<HTMLInputElement>(null);
   const [sens, setSens] = useState(0.5);
   const [busy, setBusy] = useState(false);
@@ -151,6 +168,7 @@ function ChopBar({ p, tool, setTool, say }: { p: Project; tool: Tool; setTool: (
   const room = TOTAL_PADS - bankOf(p.selectedPad) * PAD_COUNT; // pads from the bank on screen to the last bank
   return (
     <div className="chopbar">
+      {switcher}
       <div className="group">
         <input ref={file} id="file" type="file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac" hidden
           onChange={async (e) => {
@@ -362,6 +380,60 @@ function FxEdit({ p, say }: { p: Project; say: (m: string | null) => void }) {
           onClick={async () => { setBusy(true); try { say(await resamplePad(i)); } catch { say('Resampling failed. Try again.'); } setBusy(false); }}>{busy ? 'Rendering…' : 'Resample'}</button>
       </div>
       <p className="hint">Resample prints this pad with its pitch and effects into a new sample, so you can chop it again or stack more effects on top.</p>
+    </div>
+  );
+}
+
+function ViewSwitch({ view, setView }: { view: 'chop' | 'roll'; setView: (v: 'chop' | 'roll') => void }) {
+  return (
+    <div className="seg" role="radiogroup" aria-label="Top view">
+      <button id="view-chop" role="radio" aria-checked={view === 'chop'} className={view === 'chop' ? 'btn on' : 'btn'} onClick={() => setView('chop')}>Chop</button>
+      <button id="view-roll" role="radio" aria-checked={view === 'roll'} className={view === 'roll' ? 'btn on' : 'btn'} onClick={() => setView('roll')}>Piano roll</button>
+    </div>
+  );
+}
+
+const LENGTHS: [number, string][] = [[STEP_TICKS, '1/16'], [STEP_TICKS * 2, '1/8'], [PPQ, '1/4'], [PPQ * 2, '1/2'], [BAR_TICKS, 'Bar']];
+
+function RollBar({ p, say, noteLen, setNoteLen, switcher }: { p: Project; say: (m: string | null) => void; noteLen: number; setNoteLen: (n: number) => void; switcher: React.ReactNode }) {
+  const file = useRef<HTMLInputElement>(null);
+  const [devices, setDevices] = useState<string[] | null>(null);
+  const count = p.notes.filter((n) => n.pad === p.selectedPad).length;
+  const connect = async () => {
+    try {
+      await connectMidi({ hitPad: (i, v) => { engine.hitPad(i, v); dispatch('pad.select', { pad: i }); }, noteOn: (k, pad, pitch, v) => engine.noteOn(k, pad, pitch, v), noteOff: (k) => engine.noteOff(k) }, setDevices);
+    } catch { say('This browser or page does not allow MIDI devices here.'); }
+  };
+  return (
+    <div className="chopbar">
+      {switcher}
+      <div className="group">
+        <span className="meta">Pad {padLabel(p.selectedPad)} · {count} {count === 1 ? 'note' : 'notes'}</span>
+        <label className="field">Scale
+          <select id="scale" value={p.scale} onChange={(e) => dispatch('project.setScale', { scale: e.target.value as ScaleName })}>
+            {Object.keys(SCALES).map((s) => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>)}
+          </select></label>
+        <label className="field" title="The note name given to the pad's own pitch">Pad is
+          <select id="root" value={p.root} onChange={(e) => dispatch('project.setScale', { root: Number(e.target.value) })}>
+            {NOTE_NAMES.map((n, i) => <option key={n} value={i}>{n}</option>)}
+          </select></label>
+      </div>
+      <div className="group">
+        <span className="meta">Length</span>
+        <div className="seg" role="radiogroup" aria-label="New note length">
+          {LENGTHS.map(([t, label]) => <button key={t} id={`len-${t}`} role="radio" aria-checked={noteLen === t} className={noteLen === t ? 'btn on' : 'btn'} onClick={() => setNoteLen(t)}>{label}</button>)}
+        </div>
+      </div>
+      <div className="group end">
+        <button id="clear-notes" className="btn" disabled={!count} onClick={() => dispatch('notes.clearPad', { pad: p.selectedPad })}>Clear notes</button>
+        <input ref={file} id="midi-file" type="file" accept=".mid,.midi,audio/midi" hidden
+          onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) say(await importMidi(f)); }} />
+        <button id="import-midi" className="btn" onClick={() => file.current?.click()}>Import MIDI</button>
+        <button id="export-midi" className="btn" onClick={async () => say(await exportMidi())}>Export MIDI</button>
+        {midiSupported() && (devices === null
+          ? <button id="connect-midi" className="btn" onClick={connect}>Connect keyboard</button>
+          : <span className="meta">{devices.length ? devices.join(', ') : 'No MIDI device found'}</span>)}
+      </div>
     </div>
   );
 }

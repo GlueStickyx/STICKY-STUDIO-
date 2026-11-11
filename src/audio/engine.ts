@@ -53,12 +53,13 @@ export class Mixer {
 }
 
 /** Start one pad voice, with its effects, on any context (live or offline). */
-export function playPadVoice(mixer: Mixer, padIndex: number, buffer: AudioBuffer, reversed: AudioBuffer | null, pad: Pad, time: number, vel: number): Voice | null {
+/** `note` plays the pad as an instrument: shifted by `pitch` semitones and held for at most `dur` seconds. */
+export function playPadVoice(mixer: Mixer, padIndex: number, buffer: AudioBuffer, reversed: AudioBuffer | null, pad: Pad, time: number, vel: number, note?: { pitch: number; dur: number }): Voice | null {
   const ctx = mixer.ctx;
-  const len = pad.end - pad.start;
-  if (len <= 0.001) return null;
   const fx = pad.fx;
-  const rate = Math.pow(2, pad.semitones / 12);
+  const rate = Math.pow(2, (pad.semitones + (note?.pitch ?? 0)) / 12);
+  const len = Math.min(pad.end - pad.start, note ? note.dur * rate : Infinity);
+  if (len <= 0.001) return null;
   const offset = Math.max(0, pad.reverse ? buffer.duration - pad.end : pad.start);
   const src = pad.reverse && reversed ? reversed : buffer;
 
@@ -137,15 +138,17 @@ function click(ctx: Ctx, dest: AudioNode, time: number, down: boolean) {
 /** Schedule every hit in [fromTick, toTick) onto a mixer. tickTime converts an absolute tick to context time. */
 function scheduleHits(mixer: Mixer, p: Project, from: number, to: number, tickTime: (t: number) => number,
   buffers: Map<string, AudioBuffer>, reversed: (id: string) => AudioBuffer | null,
-  onHit?: (pad: number, time: number, v: Voice | null, id?: string, abs?: number) => boolean | void) {
+  onHit?: (pad: number, time: number, v: Voice | null, id?: string, abs?: number, isNote?: boolean) => boolean | void) {
   for (const h of hitsInWindow(p, from, to)) {
     const pad = p.pads[h.pad];
     const buf = pad.sampleId ? buffers.get(pad.sampleId) : undefined;
     if (!buf) continue;
     const time = tickTime(h.abs);
-    if (onHit && onHit(h.pad, time, null, h.id, h.abs) === false) continue;
-    const v = playPadVoice(mixer, h.pad, buf, pad.reverse ? reversed(pad.sampleId!) : null, pad, time, h.vel);
-    onHit?.(h.pad, time, v);
+    const isNote = h.pitch !== undefined;
+    if (!isNote && onHit && onHit(h.pad, time, null, h.id, h.abs) === false) continue;
+    const note = isNote ? { pitch: h.pitch!, dur: tickTime(h.abs + h.len!) - time } : undefined;
+    const v = playPadVoice(mixer, h.pad, buf, pad.reverse ? reversed(pad.sampleId!) : null, pad, time, h.vel, note);
+    onHit?.(h.pad, time, v, undefined, undefined, isNote);
   }
 }
 
@@ -158,6 +161,8 @@ export class Engine {
   private rev = new Map<string, AudioBuffer>();
   private voices: (Voice | null)[] = new Array(TOTAL_PADS).fill(null);
   private auditionVoice: Voice | null = null;
+  private noteVoices = new Set<Voice>(); // sequenced piano-roll notes: polyphonic, so not tied to a pad slot
+  private held = new Map<string, { voice: Voice | null; pad: number; pitch: number; tick: number; vel: number }>(); // keys being held on a MIDI keyboard
   playing = false;
   recording = false;
   private anchorTime = 0;
@@ -247,6 +252,8 @@ export class Engine {
     const now = this.ctx.currentTime;
     this.voices.forEach((v) => v?.stop(now));
     this.voices.fill(null);
+    this.noteVoices.forEach((v) => v.stop(now));
+    this.noteVoices.clear();
     this.onTransport();
   }
 
@@ -268,12 +275,13 @@ export class Engine {
     const horizon = this.tickAt(now + LOOKAHEAD_SEC);
     if (horizon <= this.scheduledUntil) return;
     const from = this.scheduledUntil, to = horizon;
-    scheduleHits(this.mixer, p, from, to, this.timeAt, this.buffers, this.reversed, (pad, time, v, id, abs) => {
+    scheduleHits(this.mixer, p, from, to, this.timeAt, this.buffers, this.reversed, (pad, time, v, id, abs, isNote) => {
       if (v === null && id !== undefined) { // pre-check: skip a hit the player just performed live
         if (this.suppress.get(id) === abs) { this.suppress.delete(id); return false; }
         return true;
       }
-      if (v) { this.voices[pad]?.stop(time); this.voices[pad] = v; this.onPadFire(pad, Math.max(0, time - now)); }
+      if (v && isNote) { this.noteVoices.add(v); if (this.noteVoices.size > 64) this.noteVoices.delete(this.noteVoices.values().next().value!); this.onPadFire(pad, Math.max(0, time - now)); }
+      else if (v) { this.voices[pad]?.stop(time); this.voices[pad] = v; this.onPadFire(pad, Math.max(0, time - now)); }
       return true;
     });
     if (p.metronome) for (const [tick, down] of beatsInWindow(from, to)) click(this.ctx, this.master, this.timeAt(tick), down);
@@ -299,6 +307,39 @@ export class Engine {
       const id = uid();
       if (q >= this.scheduledUntil) this.suppress.set(id, q); // it will come round in the scheduler: don't double it
       dispatch('loop.addEvent', { event: { id, pad: i, tick: ((q % L) + L) % L, vel } }, { group: 'take-' + this.takeId });
+    }
+  }
+
+  /**
+   * A key went down (MIDI keyboard or piano-roll audition): play the pad at a pitch until noteOff.
+   * `key` identifies the key so the matching noteOff can find it.
+   */
+  noteOn(key: string, i: number, pitch: number, vel = 1) {
+    if (!this.ctx) return;
+    const pad = getProject().pads[i];
+    const buf = pad.sampleId ? this.buffers.get(pad.sampleId) : undefined;
+    if (!buf) return;
+    const now = this.ctx.currentTime;
+    this.held.get(key)?.voice?.stop(now);
+    const voice = playPadVoice(this.mixer, i, buf, pad.reverse ? this.reversed(pad.sampleId!) : null, pad, now, vel, { pitch, dur: 30 });
+    this.held.set(key, { voice, pad: i, pitch, tick: this.playing ? this.tickAt(now) : -1, vel });
+    this.onPadFire(i, 0);
+  }
+
+  /** The key came up: stop the sound and, if recording, write the note into the piano roll. */
+  noteOff(key: string) {
+    if (!this.ctx) return;
+    const h = this.held.get(key);
+    if (!h) return;
+    this.held.delete(key);
+    const now = this.ctx.currentTime;
+    h.voice?.stop(now);
+    if (this.playing && this.recording && h.tick >= 0) {
+      const p = getProject();
+      const L = loopTicks(p), grid = p.quantize || 1;
+      const start = quantizeTick(h.tick, p.quantize);
+      const len = Math.max(grid, quantizeTick(this.tickAt(now) - h.tick, p.quantize));
+      dispatch('note.add', { note: { id: uid(), pad: h.pad, tick: ((start % L) + L) % L, len, pitch: h.pitch, vel: h.vel } }, { group: 'take-' + this.takeId });
     }
   }
 
@@ -343,8 +384,8 @@ export class Engine {
     const frames = Math.round(L * spt * sampleRate);
     const { off, mixer, rev } = this.offline((frames * 2) / sampleRate, sampleRate);
     const voices: (Voice | null)[] = new Array(TOTAL_PADS).fill(null);
-    scheduleHits(mixer, p, 0, L * 2, (t) => t * spt, this.buffers, rev, (pad, time, v) => {
-      if (v) { voices[pad]?.stop(time); voices[pad] = v; }
+    scheduleHits(mixer, p, 0, L * 2, (t) => t * spt, this.buffers, rev, (pad, time, v, _id, _abs, isNote) => {
+      if (v && !isNote) { voices[pad]?.stop(time); voices[pad] = v; }
       return true;
     });
     const out = await off.startRendering();

@@ -3,7 +3,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { describeAudio, detectTransients } from '../audio/analysis';
 import { dispatch, getProject } from '../core/bus';
-import { BANK_NAMES, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, fxActive, padLabel, parsePad, sliceBounds } from '../core/types';
+import { BANK_NAMES, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, NOTE_NAMES, PITCH_MAX, PITCH_MIN, SCALES, STEP_TICKS, fxActive, padLabel, parsePad, sliceBounds, uid } from '../core/types';
 
 /** What the tools need from the running studio. Injected so the tools can be tested without audio hardware. */
 export interface StudioDeps {
@@ -50,6 +50,19 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
       },
       clear_other_pads: { type: 'boolean', description: 'Also clear the steps of every pad not listed. Use when replacing the whole beat.' },
     }, ['patterns']),
+  },
+  {
+    name: 'write_notes',
+    description: 'Write piano-roll notes for one pad, playing that pad\'s sound as an instrument. pitch is semitones from the pad\'s own pitch (-12 to 12; 0 = the sound as sliced). step is the 16th-note position counted from 1 across the whole loop (a 2-bar loop has steps 1-32). length_steps is the note length in 16ths. Notes may overlap to make chords. By default this replaces the pad\'s existing notes; pass an empty notes array to clear them.',
+    input_schema: obj({
+      pad: padProp,
+      notes: {
+        type: 'array',
+        items: obj({ step: { type: 'number', minimum: 1 }, pitch: { type: 'integer', minimum: PITCH_MIN, maximum: PITCH_MAX }, length_steps: { type: 'number', minimum: 0.25 }, velocity: { type: 'number', minimum: 0.05, maximum: 1 } }, ['step', 'pitch', 'length_steps']),
+      },
+      keep_existing: { type: 'boolean', description: 'Add to the notes already on the pad instead of replacing them.' },
+      scale: { type: 'string', enum: Object.keys(SCALES), description: 'Also set the scale the piano roll shows, so the user sees the rows you used.' },
+    }, ['pad', 'notes']),
   },
   {
     name: 'edit_pads',
@@ -115,6 +128,8 @@ function stateJson(deps: StudioDeps): string {
     samples: p.samples.map((s) => ({ name: s.name, seconds: +s.duration.toFixed(2), detected_bpm: s.bpm, slices: s.markers.length + 1 })),
     pad_names: 'Four banks of 16 pads: A1-A16, B1-B16, C1-C16, D1-D16. Pads not listed below are empty.',
     bank_on_screen: BANK_NAMES[bankOf(p.selectedPad)],
+    loop_steps: p.bars * 16,
+    piano_roll: { scale: p.scale, pad_pitch_is_called: NOTE_NAMES[p.root], notes_format: '[step, pitch, length_steps] per note; pitch in semitones from the pad\'s own pitch' },
     pads: p.pads.flatMap((pad, i) => {
       const s = p.samples.find((x) => x.id === pad.sampleId);
       if (!s) return [];
@@ -123,6 +138,7 @@ function stateJson(deps: StudioDeps): string {
         volume_percent: Math.round(pad.gain * 100), semitones: pad.semitones, reverse: pad.reverse,
         ...(fxActive(pad.fx) ? { effects: { filter: pad.fx.filter, cutoff_hz: Math.round(pad.fx.cutoff), resonance: pad.fx.resonance, drive: pad.fx.drive, echo_level: pad.fx.delayMix, echo_time: pad.fx.delayTime, echo_repeats: +(pad.fx.delayFeedback / 0.85).toFixed(2), stutter: pad.fx.stutter } } : {}),
         steps: stepString(pad.steps), recorded_hits: p.events.filter((e) => e.pad === i).length,
+        ...(p.notes.some((n) => n.pad === i) ? { notes: p.notes.filter((n) => n.pad === i).sort((x, y) => x.tick - y.tick).map((n) => [+(n.tick / STEP_TICKS + 1).toFixed(2), n.pitch, +(n.len / STEP_TICKS).toFixed(2)]) } : {}),
       };
     }),
   });
@@ -172,6 +188,24 @@ export function runTool(name: string, input: unknown, deps: StudioDeps, group: s
       for (const row of a.patterns) run('seq.setRow', { pad: padIx(row.pad), steps: row.steps });
       const pads = [...listed].sort((x, y) => x - y).map(padLabel).join(', ');
       return ok(empty.length ? `Written. Warning: pad ${empty.join(', ')} has no audio, so its steps will be silent.` : 'Written.', `Wrote patterns for pad ${pads}`);
+    }
+
+    case 'write_notes': {
+      if (!isPad(a.pad)) return fail(`pad must be ${BAD_PAD}.`);
+      if (!Array.isArray(a.notes)) return fail('notes must be an array (empty to clear).');
+      if (a.scale !== undefined && !(a.scale in SCALES)) return fail(`scale must be one of ${Object.keys(SCALES).join(', ')}.`);
+      const pad = padIx(a.pad), steps = p.bars * 16;
+      if (a.notes.length && !p.pads[pad].sampleId) return fail(`Pad ${a.pad} is empty; notes need a sound to play.`);
+      for (const n of a.notes) {
+        if (!isNum(n?.step) || n.step < 1 || n.step >= steps + 1) return fail(`Each note needs step from 1 to ${steps} (the loop is ${p.bars} bars).`);
+        if (!Number.isInteger(n.pitch) || n.pitch < PITCH_MIN || n.pitch > PITCH_MAX) return fail(`pitch must be an integer from ${PITCH_MIN} to ${PITCH_MAX}.`);
+        if (!isNum(n.length_steps) || n.length_steps <= 0) return fail('length_steps must be a positive number.');
+        if (n.velocity !== undefined && (!isNum(n.velocity) || n.velocity <= 0 || n.velocity > 1)) return fail('velocity must be above 0 and at most 1.');
+      }
+      const made = a.notes.map((n: any) => ({ id: uid(), pad, tick: Math.round((n.step - 1) * STEP_TICKS), len: Math.max(1, Math.round(n.length_steps * STEP_TICKS)), pitch: n.pitch, vel: n.velocity ?? 1 }));
+      run('notes.set', { pad, notes: a.keep_existing ? [...p.notes.filter((n) => n.pad === pad), ...made] : made });
+      if (a.scale) dispatch('project.setScale', { scale: a.scale });
+      return ok('Written.', made.length ? `Wrote ${made.length} notes on pad ${padLabel(pad)}` : `Cleared notes on pad ${padLabel(pad)}`);
     }
 
     case 'edit_pads': {

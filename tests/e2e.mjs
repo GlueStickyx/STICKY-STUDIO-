@@ -100,6 +100,33 @@ try {
   await page.dispatchEvent('#pad-0', 'pointerdown');
   await page.click('.tab:has-text("Steps")');
 
+  // Piano roll: a drawn note is heard in the export, saved to MIDI, and comes back from the MIDI file.
+  await page.click('#view-roll');
+  await page.waitForSelector('#roll');
+  const before = await exportStats();
+  await page.click('#len-384'); // one bar
+  const box = await page.locator('#roll').boundingBox();
+  const cell = { x: 46 + (box.width - 46) * (0.5 / 32), y: 4 }; // first 16th, top row (one octave up)
+  await page.locator('#roll').click({ position: cell });
+  check('tapping the roll adds a note', (await page.locator('.chopbar .meta').first().innerText()).includes('1 note'));
+  const withNote = await exportStats();
+  check('the note is heard in the export', Math.abs(withNote.rms(0, 2.4) - before.rms(0, 2.4)) > 0.002, `${before.rms(0, 2.4).toFixed(4)} -> ${withNote.rms(0, 2.4).toFixed(4)}`);
+  const [midiDl] = await Promise.all([page.waitForEvent('download'), page.click('#export-midi')]);
+  const midiBytes = fs.readFileSync(await midiDl.path());
+  check('MIDI export is a MIDI file with the tempo track, pads and one note track', midiBytes.subarray(0, 4).toString() === 'MThd' && midiBytes.readUInt16BE(10) === 3, midiDl.suggestedFilename());
+  await page.click('#clear-notes');
+  check('clear notes empties the roll', (await page.locator('.chopbar .meta').first().innerText()).includes('0 notes'));
+  await page.setInputFiles('#midi-file', { name: 'riff.mid', mimeType: 'audio/midi', buffer: midiBytes });
+  await page.waitForSelector('.toast:has-text("Imported 1 notes onto pad A1")');
+  check('MIDI import brings the note back', Math.abs((await exportStats()).rms(0, 2.4) - withNote.rms(0, 2.4)) < 0.001);
+  await page.setInputFiles('#midi-file', { name: 'bad.mid', mimeType: 'audio/midi', buffer: Buffer.from('nope') });
+  await page.waitForSelector('.toast:has-text("Could not read")');
+  await page.locator('#roll').click({ position: cell });
+  check('tapping a note removes it', (await page.locator('.chopbar .meta').first().innerText()).includes('0 notes'));
+  if (shots) { await page.locator('#roll').click({ position: cell }); await page.locator('#roll').click({ position: { x: 46 + (box.width - 46) * (20.5 / 32), y: box.height / 2 } }); await page.screenshot({ path: `${shots}/roll.png` }); }
+  for (let i = 0; i < 40 && await page.locator('#undo:not([disabled])').count(); i++) await page.click('#undo');
+  await page.click('#view-chop');
+
   // Step toggle cycles on -> soft -> off.
   await page.dispatchEvent('#pad-5', 'pointerdown');
   await page.click('#step-3');

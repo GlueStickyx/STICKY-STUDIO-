@@ -3,7 +3,7 @@
 import { BAR_TICKS, PPQ, STEP_COUNT, STEP_TICKS } from './types';
 import type { Project } from './types';
 
-export interface Hit { abs: number; pad: number; vel: number; id?: string }
+export interface Hit { abs: number; pad: number; vel: number; id?: string; /** Set for piano-roll notes: semitone offset and length in ticks. */ pitch?: number; len?: number }
 
 export const loopTicks = (p: Project) => p.bars * BAR_TICKS;
 export const secondsPerTick = (bpm: number) => 60 / bpm / PPQ;
@@ -26,6 +26,10 @@ export function hitsInWindow(p: Project, from: number, to: number): Hit[] {
     for (const e of p.events) {
       const abs = n * L + e.tick;
       if (abs >= from && abs < to) out.push({ abs, pad: e.pad, vel: e.vel, id: e.id });
+    }
+    for (const nt of p.notes) {
+      const abs = n * L + nt.tick;
+      if (abs >= from && abs < to) out.push({ abs, pad: nt.pad, vel: nt.vel, id: nt.id, pitch: nt.pitch, len: nt.len });
     }
   }
   return out.sort((a, b) => a.abs - b.abs);

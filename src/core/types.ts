@@ -59,6 +59,31 @@ export interface LoopEvent {
   vel: number;
 }
 
+/** A melodic note: the pad's sound replayed at another pitch for a set length. */
+export interface Note {
+  id: string;
+  pad: number; // which pad's sound is the instrument
+  tick: number; // start within the loop
+  len: number; // length in ticks
+  pitch: number; // semitones away from the pad's own pitch, PITCH_MIN..PITCH_MAX
+  vel: number;
+}
+export const PITCH_MIN = -12;
+export const PITCH_MAX = 12;
+export const SCALES = {
+  chromatic: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  major: [0, 2, 4, 5, 7, 9, 11],
+  minor: [0, 2, 3, 5, 7, 8, 10],
+  'harmonic minor': [0, 2, 3, 5, 7, 8, 11],
+  dorian: [0, 2, 3, 5, 7, 9, 10],
+  phrygian: [0, 1, 3, 5, 7, 8, 10],
+  'minor pentatonic': [0, 3, 5, 7, 10],
+  'major pentatonic': [0, 2, 4, 7, 9],
+} as const;
+export type ScaleName = keyof typeof SCALES;
+export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+export const inScale = (pitch: number, scale: ScaleName) => (SCALES[scale] as readonly number[]).includes(((pitch % 12) + 12) % 12);
+
 export interface Project {
   version: 1;
   bpm: number;
@@ -72,6 +97,11 @@ export interface Project {
   /** Index into pads (0..63). The bank on screen is the one holding the selected pad. */
   selectedPad: number;
   events: LoopEvent[];
+  notes: Note[];
+  /** Scale shown in the piano roll, counted from the pad's own pitch. */
+  scale: ScaleName;
+  /** Note name (0 = C) given to a pad's own pitch, for labels and MIDI files. */
+  root: number;
 }
 
 export function emptyPad(): Pad {
@@ -83,7 +113,7 @@ export function emptyProject(): Project {
     version: 1, bpm: 120, swing: 0, bars: 2, quantize: STEP_TICKS, metronome: false,
     samples: [], activeSampleId: null,
     pads: Array.from({ length: TOTAL_PADS }, emptyPad),
-    selectedPad: 0, events: [],
+    selectedPad: 0, events: [], notes: [], scale: 'minor', root: 0,
   };
 }
 
@@ -100,7 +130,7 @@ export function parsePad(label: unknown): number | null {
 /** Bring a project saved by an older version up to the current shape. */
 export function normalizeProject(p: Project): Project {
   const pads = Array.from({ length: TOTAL_PADS }, (_, i) => (p.pads[i] ? { ...p.pads[i], fx: { ...defaultFx(), ...p.pads[i].fx } } : emptyPad()));
-  return { ...p, pads, selectedPad: Math.min(Math.max(0, p.selectedPad ?? 0), TOTAL_PADS - 1) };
+  return { ...p, pads, selectedPad: Math.min(Math.max(0, p.selectedPad ?? 0), TOTAL_PADS - 1), notes: p.notes ?? [], scale: p.scale in SCALES ? p.scale : 'minor', root: p.root ?? 0 };
 }
 
 export function uid(): string {

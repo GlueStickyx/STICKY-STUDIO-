@@ -81,6 +81,9 @@ input[type="range"] { accent-color: var(--accent); min-height: 32px; touch-actio
 .wave-canvas canvas { display: block; touch-action: none; }
 .wave-zoom { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; }
 .wave-scroll { width: 100%; }
+.roll { position: relative; flex: 1; min-height: 150px; background: var(--surface); border-radius: var(--radius); overflow: hidden; }
+.roll canvas { display: block; touch-action: none; }
+.roll-head { position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: var(--fg); pointer-events: none; }
 .empty { flex: 1; display: grid; place-items: center; color: var(--dim); background: var(--surface); border-radius: var(--radius); }
 
 /* The performance surface is as tall as the pads; a long side panel scrolls inside it and never squeezes the waveform. */

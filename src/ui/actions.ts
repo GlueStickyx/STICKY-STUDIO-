@@ -6,7 +6,8 @@ import { zipSingle } from '../audio/zip';
 import { useDownloads } from '../ai/viewer';
 import { dispatch, getProject, loadProject, subscribe } from '../core/bus';
 import { loadAudio, loadSavedProject, requestPersistence, saveAudio, saveProject } from '../core/storage';
-import { emptyProject, normalizeProject, padLabel, uid } from '../core/types';
+import { midiToNotes, parseMidi, projectToMidi } from '../core/midi';
+import { BAR_TICKS, emptyProject, normalizeProject, padLabel, uid } from '../core/types';
 import type { Sample } from '../core/types';
 
 export function monoOf(id: string): { mono: Float32Array; sampleRate: number } | null {
@@ -119,24 +120,46 @@ export async function boot(): Promise<void> {
   setSaveState((await saveProject(getProject())) ? 'saved' : 'off');
 }
 
-/** Render the loop and hand it to the user. Returns a sentence describing what happened. */
-export async function exportLoopWav(): Promise<string> {
-  const ch = await engine.renderLoop(44100);
-  const wav = encodeWav(ch, 44100);
-  const p = getProject();
-  const name = `sticky-loop-${p.bars}bar-${Math.round(p.bpm)}bpm`;
+/**
+ * Hand a generated file to the user. Inside the Claude app a page may only save certain file types,
+ * so there the file travels inside a zip. Returns a sentence describing what happened.
+ */
+async function saveFile(name: string, ext: string, bytes: ArrayBuffer, mime: string, what: string): Promise<string> {
   const downloads = await useDownloads();
   if (downloads) {
-    // Inside the Claude app a page may only save certain file types, so the WAV travels in a zip.
-    try { await downloads.save({ filename: `${name}.zip`, data: new Blob([zipSingle(`${name}.wav`, wav)]) }); return 'Loop saved as a zip with the WAV inside.'; }
+    try { await downloads.save({ filename: `${name}.zip`, data: new Blob([zipSingle(`${name}.${ext}`, bytes)]) }); return `${what} saved as a zip with the ${ext.toUpperCase()} file inside.`; }
     catch (e) { return (e as { code?: string })?.code === 'declined' ? 'Save cancelled.' : 'Saving is not available in this view.'; }
   }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
-  a.download = `${name}.wav`;
+  a.href = URL.createObjectURL(new Blob([bytes], { type: mime }));
+  a.download = `${name}.${ext}`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  return 'Loop saved as a WAV file.';
+  return `${what} saved as a ${ext.toUpperCase()} file.`;
+}
+const fileStem = (kind: string) => { const p = getProject(); return `sticky-${kind}-${p.bars}bar-${Math.round(p.bpm)}bpm`; };
+
+/** Render the loop and hand it to the user. Returns a sentence describing what happened. */
+export async function exportLoopWav(): Promise<string> {
+  return saveFile(fileStem('loop'), 'wav', encodeWav(await engine.renderLoop(44100), 44100), 'audio/wav', 'Loop');
+}
+
+/** Save the loop's patterns, recorded hits and piano-roll notes as a MIDI file. */
+export async function exportMidi(): Promise<string> {
+  const bytes = projectToMidi(getProject());
+  return saveFile(fileStem('midi'), 'mid', bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer, 'audio/midi', 'MIDI');
+}
+
+/** Read a MIDI file into the piano roll of the selected pad, replacing that pad's notes. */
+export async function importMidi(file: File): Promise<string> {
+  const p = getProject();
+  let parsed;
+  try { parsed = parseMidi(new Uint8Array(await file.arrayBuffer())); } catch (e) { return `Could not read "${file.name}": ${(e as Error).message}.`; }
+  const { notes, dropped } = midiToNotes(parsed, p.selectedPad, p.root, p.bars * BAR_TICKS, uid);
+  if (!notes.length) return parsed.notes.length ? 'Every note in that file starts after the end of the loop. Make the loop longer and import again.' : 'That MIDI file has no notes.';
+  dispatch('notes.set', { pad: p.selectedPad, notes });
+  const tempo = parsed.bpm && Math.abs(parsed.bpm - p.bpm) > 0.5 ? ` The file's tempo is ${parsed.bpm} BPM; the project stays at ${p.bpm}.` : '';
+  return `Imported ${notes.length} notes onto pad ${padLabel(p.selectedPad)}.${dropped ? ` ${dropped} past the end of the loop were left out.` : ''}${tempo}`;
 }
