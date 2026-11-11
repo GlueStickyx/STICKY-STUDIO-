@@ -205,7 +205,9 @@ function Pads({ p }: { p: Project }) {
       }, delay * 1000);
     };
     const key = (e: KeyboardEvent) => {
-      if (e.repeat || e.metaKey || e.ctrlKey || (e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'SELECT') return;
+      const el = e.target as HTMLElement | null;
+      // Never steal keys from anything the user is typing or choosing in (the assistant box, BPM, menus).
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey || el?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el?.tagName ?? '')) return;
       if (e.key === ' ') { e.preventDefault(); engine.playing ? engine.stop() : engine.play(); return; }
       const i = KEYS.indexOf(e.key.toLowerCase());
       if (i >= 0) { engine.hitPad(i); dispatch('pad.select', { pad: i }); }

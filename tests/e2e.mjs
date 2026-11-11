@@ -126,6 +126,11 @@ try {
   await page.click('#assistant');
   await page.fill('#api-key', 'sk-ant-test-key');
   await page.click('#save-key');
+  // Typing in the assistant box must not play pads or toggle the transport.
+  await page.click('#chat-input');
+  await page.keyboard.type('a z 1 q');
+  check('typing in the assistant box reaches the box', await page.inputValue('#chat-input') === 'a z 1 q');
+  check('typing in the assistant box does not start playback', (await page.locator('.pos').innerText()).includes('–'));
   await page.fill('#chat-input', 'four on the floor on pad 9');
   await page.click('#chat-send');
   await page.waitForSelector('.msg.assistant:has-text("Four on the floor")');
