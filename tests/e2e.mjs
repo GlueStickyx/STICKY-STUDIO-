@@ -17,7 +17,10 @@ async function wavStats(download) {
   const buf = fs.readFileSync(await download.path());
   let peak = 0;
   for (let o = 44; o + 1 < buf.length; o += 2) peak = Math.max(peak, Math.abs(buf.readInt16LE(o)));
-  return { bytes: buf.length, peak, rate: buf.readUInt32LE(24), channels: buf.readUInt16LE(22) };
+  const rate = buf.readUInt32LE(24);
+  // RMS of the left channel between two times in seconds.
+  const rms = (from, to) => { let sum = 0, n = 0; for (let f = Math.floor(from * rate); f < to * rate && 44 + f * 4 + 1 < buf.length; f++) { const v = buf.readInt16LE(44 + f * 4) / 32768; sum += v * v; n++; } return Math.sqrt(sum / Math.max(1, n)); };
+  return { bytes: buf.length, peak, rate, channels: buf.readUInt16LE(22), rms };
 }
 
 try {
@@ -53,6 +56,49 @@ try {
   for (let i = 0; i < 3; i++) await page.click('#undo');
   [dl] = await Promise.all([page.waitForEvent('download'), page.click('#export')]);
   check('undo brings the pattern back', (await wavStats(dl)).peak > 2000);
+
+  // Effects change the rendered audio, not just the screen.
+  const exportStats = async () => { const [d] = await Promise.all([page.waitForEvent('download'), page.click('#export')]); return wavStats(d); };
+  const dry = await exportStats();
+  await page.click('#tab-fx');
+  for (const pad of [0, 1, 2]) {
+    await page.dispatchEvent(`#pad-${pad}`, 'pointerdown');
+    await page.click('#fx-filter-highpass');
+    await page.fill('#fx-cutoff', '1');
+  }
+  const thin = await exportStats();
+  check('a 16 kHz high-pass removes most of the sound', thin.rms(0, 4.8) < dry.rms(0, 4.8) * 0.3, `${dry.rms(0, 4.8).toFixed(4)} -> ${thin.rms(0, 4.8).toFixed(4)}`);
+  for (const pad of [0, 1, 2]) { await page.dispatchEvent(`#pad-${pad}`, 'pointerdown'); await page.click('#fx-reset'); }
+  check('removing effects restores the sound', Math.abs((await exportStats()).rms(0, 4.8) - dry.rms(0, 4.8)) < 0.001);
+  await page.dispatchEvent('#pad-0', 'pointerdown');
+  await page.fill('#fx-drive', '1');
+  const driven = await exportStats();
+  check('drive changes the sound without clipping the file', Math.abs(driven.rms(0, 4.8) - dry.rms(0, 4.8)) > 0.002 && driven.peak < 32767, `peak ${driven.peak}`);
+  await page.click('#fx-reset');
+  // One kick on the last step, with a quarter-note echo: the echo must wrap round to the start of the loop.
+  await page.click('.tab:has-text("Steps")');
+  for (const pad of [1, 2, 0]) { await page.dispatchEvent(`#pad-${pad}`, 'pointerdown'); await page.click('text=Clear steps'); }
+  await page.click('#step-15');
+  const lone = await exportStats();
+  check('without echo the middle of the loop is silent', lone.rms(0.35, 0.7) < 0.0005, lone.rms(0.35, 0.7).toFixed(5));
+  await page.click('#tab-fx');
+  await page.fill('#fx-delay', '1');
+  await page.click('#fx-time-1-4');
+  const echoed = await exportStats();
+  check('echo tail wraps to the start so the loop is seamless', echoed.rms(0.35, 0.7) > 0.01, echoed.rms(0.35, 0.7).toFixed(4));
+  await page.click('#fx-stutter-4');
+  check('stutter changes the rendered hit', Math.abs((await exportStats()).rms(4.6, 4.8) - echoed.rms(4.6, 4.8)) > 0.0005);
+  // Resample prints the pad with its effects into a new sample and clears the effects.
+  await page.click('#fx-resample');
+  await page.waitForSelector('#sample option:has-text("resampled")', { state: 'attached' });
+  check('resample adds a new sample and clears the pad effects', !(await page.locator('#tab-fx').innerText()).includes('•') && await page.locator('#pad-0.loaded').count() === 1);
+  const printed = await exportStats();
+  check('the resampled pad still carries its echo', printed.rms(0.35, 0.7) > 0.005, printed.rms(0.35, 0.7).toFixed(4));
+  await page.click('#undo');
+  check('one undo reverses the resample', await page.locator('#sample option:has-text("resampled")').count() === 0 && (await page.locator('#tab-fx').innerText()).includes('•'));
+  for (let i = 0; i < 40 && await page.locator('#undo:not([disabled])').count(); i++) await page.click('#undo');
+  await page.dispatchEvent('#pad-0', 'pointerdown');
+  await page.click('.tab:has-text("Steps")');
 
   // Step toggle cycles on -> soft -> off.
   await page.dispatchEvent('#pad-5', 'pointerdown');

@@ -1,7 +1,7 @@
 // The command bus. Every change to the project goes through dispatch(): the UI, undo/redo,
 // autosave and (later) the AI assistant all use this one entry point.
-import { BANK_COUNT, BAR_TICKS, PAD_COUNT, STEP_COUNT, TOTAL_PADS, bankOf, emptyPad, emptyProject, sliceBounds } from './types';
-import type { LoopEvent, Pad, Project, Sample } from './types';
+import { BANK_COUNT, BAR_TICKS, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, defaultFx, emptyPad, emptyProject, sliceBounds } from './types';
+import type { LoopEvent, Pad, PadFx, Project, Sample } from './types';
 
 type Handler = (p: Project, args: any) => Project;
 interface CommandDef { run: Handler; undoable: boolean; describe: string }
@@ -56,7 +56,7 @@ export const commands: Record<string, CommandDef> = {
       return {
         ...p,
         pads: p.pads.map((pad, i) => (i >= first && i - first < b.length - 1
-          ? { ...pad, sampleId: s.id, start: b[i - first], end: b[i - first + 1], reverse: false, semitones: 0, gain: 1 }
+          ? { ...pad, sampleId: s.id, start: b[i - first], end: b[i - first + 1], reverse: false, semitones: 0, gain: 1, fx: defaultFx() }
           : pad)),
       };
     },
@@ -71,6 +71,27 @@ export const commands: Record<string, CommandDef> = {
       reverse: a.reverse !== undefined ? !!a.reverse : pad.reverse,
     })),
   },
+  'pad.setFx': {
+    undoable: true, describe: 'Change effects on one pad: filter, cutoff, resonance, drive, delayMix, delayTime, delayFeedback, stutter',
+    run: (p, a) => mapPad(p, a.pad, (pad) => {
+      const f = pad.fx, n = a.fx as Partial<PadFx>;
+      const num = (v: unknown, lo: number, hi: number, cur: number) => (typeof v === 'number' && Number.isFinite(v) ? clamp(v, lo, hi) : cur);
+      return {
+        ...pad,
+        fx: {
+          filter: ['off', 'lowpass', 'highpass', 'bandpass'].includes(n.filter as string) ? n.filter! : f.filter,
+          cutoff: num(n.cutoff, 40, 16000, f.cutoff),
+          resonance: num(n.resonance, 0, 1, f.resonance),
+          drive: num(n.drive, 0, 1, f.drive),
+          delayMix: num(n.delayMix, 0, 1, f.delayMix),
+          delayTime: n.delayTime !== undefined && n.delayTime in DELAY_TIMES ? n.delayTime : f.delayTime,
+          delayFeedback: num(n.delayFeedback, 0, 0.85, f.delayFeedback),
+          stutter: (STUTTERS as readonly number[]).includes(n.stutter as number) ? n.stutter! : f.stutter,
+        },
+      };
+    }),
+  },
+  'pad.resetFx': { undoable: true, describe: 'Remove all effects from one pad', run: (p, a) => mapPad(p, a.pad, (pad) => ({ ...pad, fx: defaultFx() })) },
   'pad.clear': { undoable: true, describe: 'Empty a pad and its steps and recorded hits', run: (p, a) => ({ ...mapPad(p, a.pad, () => emptyPad()), events: p.events.filter((e) => e.pad !== a.pad) }) },
   'pad.select': { undoable: false, describe: 'Select a pad for editing', run: (p, a) => ({ ...p, selectedPad: clamp(a.pad, 0, TOTAL_PADS - 1) }) },
   'bank.select': { undoable: false, describe: 'Show pad bank 0-3 (A-D)', run: (p, a) => ({ ...p, selectedPad: clamp(a.bank, 0, BANK_COUNT - 1) * PAD_COUNT + (p.selectedPad % PAD_COUNT) }) },

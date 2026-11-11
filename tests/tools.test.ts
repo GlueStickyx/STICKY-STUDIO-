@@ -121,6 +121,22 @@ describe('writing', () => {
     const m = getProject().samples[0].markers;
     expect(m.some((t) => Math.abs(t - 1) < 0.03)).toBe(true);
   });
+  it('set_pad_effects applies, validates and shows up in the state', () => {
+    const r = call('set_pad_effects', { pads: [{ pad: 'A1', filter: 'lowpass', cutoff_hz: 800, drive: 0.5, echo_level: 0.3, echo_time: '1/8', echo_repeats: 1, stutter: 4 }] });
+    expect(r.isError).toBe(false);
+    expect(getProject().pads[0].fx).toMatchObject({ filter: 'lowpass', cutoff: 800, drive: 0.5, delayMix: 0.3, delayTime: '1/8', stutter: 4 });
+    expect(getProject().pads[0].fx.delayFeedback).toBeCloseTo(0.85);
+    expect(JSON.parse(call('get_studio_state', {}).text).pads[0].effects).toMatchObject({ filter: 'lowpass', echo_repeats: 1, stutter: 4 });
+    call('set_pad_effects', { pads: [{ pad: 'A1', reset: true, drive: 0.2 }] });
+    expect(getProject().pads[0].fx).toMatchObject({ filter: 'off', drive: 0.2, delayMix: 0, stutter: 1 });
+    for (const bad of [{ pad: 'A1', stutter: 5 }, { pad: 'A1', cutoff_hz: 5 }, { pad: 'A1', drive: 2 }, { pad: 'A1', echo_time: '1/3' }, { pad: 'A1', filter: 'notch' }, { pad: 'A9', drive: 0.1 }]) {
+      expect(call('set_pad_effects', { pads: [bad] }).isError).toBe(true);
+    }
+  });
+  it('pad.setFx ignores junk and clamps numbers', () => {
+    dispatch('pad.setFx', { pad: 0, fx: { cutoff: 99999, drive: -4, stutter: 7, delayTime: 'x', filter: 'weird', delayFeedback: 3 } });
+    expect(getProject().pads[0].fx).toMatchObject({ cutoff: 16000, drive: 0, stutter: 1, delayTime: '1/8d', filter: 'off', delayFeedback: 0.85 });
+  });
   it('erase targets', () => {
     dispatch('seq.setRow', { pad: 0, steps: [1] });
     dispatch('loop.addEvent', { event: { id: 'e', pad: 0, tick: 0, vel: 1 } });

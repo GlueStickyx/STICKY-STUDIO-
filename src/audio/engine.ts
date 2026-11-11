@@ -1,8 +1,8 @@
 // The audio engine. It reads the project from the command bus and never mutates it directly:
 // recording a hit dispatches 'loop.addEvent' like any other change.
-import { dispatch, getProject } from '../core/bus';
+import { dispatch, getProject, subscribe } from '../core/bus';
 import { beatsInWindow, hitsInWindow, loopTicks, quantizeTick, secondsPerTick } from '../core/sequence';
-import { TOTAL_PADS, uid } from '../core/types';
+import { DELAY_TIMES, TOTAL_PADS, uid } from '../core/types';
 import type { Pad, Project } from '../core/types';
 import { computePeaks, mixToMono } from './analysis';
 
@@ -12,34 +12,105 @@ const TIMER_MS = 25;
 type Ctx = BaseAudioContext;
 interface Voice { stop: (t: number) => void }
 
-/** Start one pad voice on any context (live or offline). */
-export function playPadVoice(ctx: Ctx, dest: AudioNode, buffer: AudioBuffer, reversed: AudioBuffer | null, pad: Pad, time: number, vel: number): Voice | null {
+const curves = new Map<number, Float32Array<ArrayBuffer>>();
+/** Saturation curve for a drive amount 0..1 (cached). Output is normalised so full scale stays full scale. */
+function driveCurve(drive: number): Float32Array<ArrayBuffer> {
+  const key = Math.round(drive * 50);
+  let c = curves.get(key);
+  if (!c) {
+    const k = 1 + (key / 50) * 24;
+    c = new Float32Array(1025);
+    for (let i = 0; i < c.length; i++) c[i] = Math.tanh(k * (i / 512 - 1)) / Math.tanh(k);
+    curves.set(key, c);
+  }
+  return c;
+}
+
+/**
+ * Where voices go. One per audio context (live, or one offline render). It owns the per-pad echo lines,
+ * which must outlive individual voices so their tails keep ringing.
+ */
+export class Mixer {
+  private delays = new Map<number, { input: GainNode; delay: DelayNode; fb: GainNode }>();
+  constructor(readonly ctx: Ctx, readonly out: AudioNode) {}
+
+  /** Bring echo settings in line with the project. Cheap; call whenever the project changes. */
+  sync(p: Project) {
+    p.pads.forEach((pad, i) => {
+      if (pad.fx.delayMix <= 0 && !this.delays.has(i)) return;
+      let d = this.delays.get(i);
+      if (!d) {
+        d = { input: this.ctx.createGain(), delay: this.ctx.createDelay(2), fb: this.ctx.createGain() };
+        d.input.connect(d.delay); d.delay.connect(d.fb); d.fb.connect(d.delay); d.delay.connect(this.out);
+        this.delays.set(i, d);
+      }
+      d.delay.delayTime.value = Math.min(2, (DELAY_TIMES[pad.fx.delayTime] * 60) / p.bpm);
+      d.fb.gain.value = pad.fx.delayFeedback;
+    });
+  }
+  /** The echo input for a pad, or null when the pad has no echo line yet. */
+  send(i: number): AudioNode | null { return this.delays.get(i)?.input ?? null; }
+}
+
+/** Start one pad voice, with its effects, on any context (live or offline). */
+export function playPadVoice(mixer: Mixer, padIndex: number, buffer: AudioBuffer, reversed: AudioBuffer | null, pad: Pad, time: number, vel: number): Voice | null {
+  const ctx = mixer.ctx;
   const len = pad.end - pad.start;
   if (len <= 0.001) return null;
-  const src = ctx.createBufferSource();
-  src.buffer = pad.reverse && reversed ? reversed : buffer;
+  const fx = pad.fx;
   const rate = Math.pow(2, pad.semitones / 12);
-  src.playbackRate.value = rate;
-  const g = ctx.createGain();
-  const level = pad.gain * vel;
-  const played = len / rate;
-  const fade = Math.min(0.008, played / 4);
-  g.gain.setValueAtTime(0, time);
-  g.gain.linearRampToValueAtTime(level, time + Math.min(0.002, played / 4));
-  g.gain.setValueAtTime(level, time + played - fade);
-  g.gain.linearRampToValueAtTime(0, time + played);
-  src.connect(g).connect(dest);
-  const offset = pad.reverse ? buffer.duration - pad.end : pad.start;
-  src.start(time, Math.max(0, offset), len);
+  const offset = Math.max(0, pad.reverse ? buffer.duration - pad.end : pad.start);
+  const src = pad.reverse && reversed ? reversed : buffer;
+
+  // Chain: sources -> [filter] -> [drive] -> level -> mixer out, with a tap to the pad's echo line.
+  const level = ctx.createGain();
+  level.gain.value = pad.gain * vel * (1 - fx.drive * 0.45); // saturation makes things louder; pull it back
+  let head: AudioNode = level;
+  if (fx.drive > 0) {
+    const shaper = ctx.createWaveShaper();
+    shaper.curve = driveCurve(fx.drive);
+    shaper.oversample = '2x';
+    shaper.connect(head); head = shaper;
+  }
+  if (fx.filter !== 'off') {
+    const f = ctx.createBiquadFilter();
+    f.type = fx.filter;
+    f.frequency.value = fx.cutoff;
+    f.Q.value = 0.5 + fx.resonance * 14;
+    f.connect(head); head = f;
+  }
+  level.connect(mixer.out);
+  const send = fx.delayMix > 0 ? mixer.send(padIndex) : null;
+  if (send) { const s = ctx.createGain(); s.gain.value = fx.delayMix; level.connect(s).connect(send); }
+
+  // Stutter: the first 1/N of the slice, N times back to back. N = 1 is the plain slice.
+  const n = Math.max(1, fx.stutter);
+  const chunk = len / n, played = chunk / rate;
+  const fade = Math.min(0.006, played / 4);
+  const sources: AudioBufferSourceNode[] = [];
+  for (let k = 0; k < n; k++) {
+    const t = time + k * played;
+    const node = ctx.createBufferSource();
+    node.buffer = src;
+    node.playbackRate.value = rate;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(1, t + Math.min(0.002, played / 4));
+    env.gain.setValueAtTime(1, t + played - fade);
+    env.gain.linearRampToValueAtTime(0, t + played);
+    node.connect(env).connect(head);
+    node.start(t, offset, chunk);
+    sources.push(node);
+  }
   let stopped = false;
   return {
     stop: (t: number) => {
       if (stopped) return;
       stopped = true;
       try {
-        g.gain.cancelScheduledValues(t);
-        g.gain.setTargetAtTime(0, t, 0.004);
-        src.stop(t + 0.03);
+        level.gain.cancelScheduledValues(t);
+        level.gain.setTargetAtTime(0, t, 0.004);
+        sources.forEach((s) => s.stop(t + 0.03));
       } catch { /* already ended */ }
     },
   };
@@ -63,8 +134,8 @@ function click(ctx: Ctx, dest: AudioNode, time: number, down: boolean) {
   o.start(time); o.stop(time + 0.05);
 }
 
-/** Schedule every hit in [fromTick, toTick) onto a context. tickTime converts an absolute tick to context time. */
-function scheduleHits(ctx: Ctx, dest: AudioNode, p: Project, from: number, to: number, tickTime: (t: number) => number,
+/** Schedule every hit in [fromTick, toTick) onto a mixer. tickTime converts an absolute tick to context time. */
+function scheduleHits(mixer: Mixer, p: Project, from: number, to: number, tickTime: (t: number) => number,
   buffers: Map<string, AudioBuffer>, reversed: (id: string) => AudioBuffer | null,
   onHit?: (pad: number, time: number, v: Voice | null, id?: string, abs?: number) => boolean | void) {
   for (const h of hitsInWindow(p, from, to)) {
@@ -73,7 +144,7 @@ function scheduleHits(ctx: Ctx, dest: AudioNode, p: Project, from: number, to: n
     if (!buf) continue;
     const time = tickTime(h.abs);
     if (onHit && onHit(h.pad, time, null, h.id, h.abs) === false) continue;
-    const v = playPadVoice(ctx, dest, buf, pad.reverse ? reversed(pad.sampleId!) : null, pad, time, h.vel);
+    const v = playPadVoice(mixer, h.pad, buf, pad.reverse ? reversed(pad.sampleId!) : null, pad, time, h.vel);
     onHit?.(h.pad, time, v);
   }
 }
@@ -81,6 +152,7 @@ function scheduleHits(ctx: Ctx, dest: AudioNode, p: Project, from: number, to: n
 export class Engine {
   ctx: AudioContext | null = null;
   private master!: GainNode;
+  private mixer!: Mixer;
   buffers = new Map<string, AudioBuffer>();
   peaks = new Map<string, Float32Array>();
   private rev = new Map<string, AudioBuffer>();
@@ -109,6 +181,9 @@ export class Engine {
       const limiter = this.ctx.createDynamicsCompressor();
       limiter.threshold.value = -3; limiter.ratio.value = 12; limiter.attack.value = 0.002; limiter.release.value = 0.1;
       this.master.connect(limiter).connect(this.ctx.destination);
+      this.mixer = new Mixer(this.ctx, this.master);
+      this.mixer.sync(getProject());
+      subscribe(() => this.mixer.sync(getProject()));
     }
     if (this.ctx.state !== 'running') await this.ctx.resume();
   }
@@ -193,7 +268,7 @@ export class Engine {
     const horizon = this.tickAt(now + LOOKAHEAD_SEC);
     if (horizon <= this.scheduledUntil) return;
     const from = this.scheduledUntil, to = horizon;
-    scheduleHits(this.ctx, this.master, p, from, to, this.timeAt, this.buffers, this.reversed, (pad, time, v, id, abs) => {
+    scheduleHits(this.mixer, p, from, to, this.timeAt, this.buffers, this.reversed, (pad, time, v, id, abs) => {
       if (v === null && id !== undefined) { // pre-check: skip a hit the player just performed live
         if (this.suppress.get(id) === abs) { this.suppress.delete(id); return false; }
         return true;
@@ -214,7 +289,7 @@ export class Engine {
     if (!buf) return;
     const now = this.ctx.currentTime;
     this.voices[i]?.stop(now);
-    this.voices[i] = playPadVoice(this.ctx, this.master, buf, pad.reverse ? this.reversed(pad.sampleId!) : null, pad, now, vel);
+    this.voices[i] = playPadVoice(this.mixer, i, buf, pad.reverse ? this.reversed(pad.sampleId!) : null, pad, now, vel);
     this.onPadFire(i, 0);
     if (this.playing && this.recording) {
       const cur = this.tickAt(now);
@@ -227,39 +302,68 @@ export class Engine {
     }
   }
 
-  /** Play a region of a sample directly (chop view preview). */
+  /** Play a region of a sample directly, without effects (chop view preview). */
   audition(sampleId: string, start: number, end: number) {
     if (!this.ctx) return;
     const buf = this.buffers.get(sampleId);
     if (!buf) return;
     const now = this.ctx.currentTime;
     this.auditionVoice?.stop(now);
-    this.auditionVoice = playPadVoice(this.ctx, this.master, buf, null,
-      { sampleId, start, end, gain: 1, semitones: 0, reverse: false, steps: [] }, now, 1);
+    const plain: Pad = { ...getProject().pads[0], sampleId, start, end, gain: 1, semitones: 0, reverse: false, steps: [] };
+    plain.fx = { ...plain.fx, filter: 'off', drive: 0, delayMix: 0, stutter: 1 };
+    this.auditionVoice = playPadVoice(this.mixer, -1, buf, null, plain, now, 1);
   }
 
-  /** Render exactly one pass of the loop to stereo sample data, faster than real time. */
+  private offline(seconds: number, sampleRate: number) {
+    const off = new OfflineAudioContext(2, Math.max(1, Math.round(seconds * sampleRate)), sampleRate);
+    const master = off.createGain();
+    master.gain.value = 0.9;
+    master.connect(off.destination);
+    const mixer = new Mixer(off, master);
+    mixer.sync(getProject());
+    const cache = new Map<string, AudioBuffer>();
+    const rev = (id: string) => {
+      const b = this.buffers.get(id);
+      if (!b) return null;
+      if (!cache.has(id)) cache.set(id, reverseBuffer(off, b));
+      return cache.get(id)!;
+    };
+    return { off, mixer, rev };
+  }
+
+  /**
+   * Render exactly one pass of the loop to stereo sample data, faster than real time.
+   * Two passes are rendered and the second is kept, so echoes and long slices that cross the loop
+   * end wrap round to the start and the exported file loops seamlessly.
+   */
   async renderLoop(sampleRate = 44100): Promise<Float32Array[]> {
     const p = getProject();
     const spt = secondsPerTick(p.bpm);
     const L = loopTicks(p);
     const frames = Math.round(L * spt * sampleRate);
-    const off = new OfflineAudioContext(2, frames, sampleRate);
-    const master = off.createGain();
-    master.gain.value = 0.9;
-    master.connect(off.destination);
-    const revCache = new Map<string, AudioBuffer>();
-    const rev = (id: string) => {
-      const b = this.buffers.get(id);
-      if (!b) return null;
-      if (!revCache.has(id)) revCache.set(id, reverseBuffer(off, b));
-      return revCache.get(id)!;
-    };
+    const { off, mixer, rev } = this.offline((frames * 2) / sampleRate, sampleRate);
     const voices: (Voice | null)[] = new Array(TOTAL_PADS).fill(null);
-    scheduleHits(off, master, p, 0, L, (t) => t * spt, this.buffers, rev, (pad, time, v) => {
+    scheduleHits(mixer, p, 0, L * 2, (t) => t * spt, this.buffers, rev, (pad, time, v) => {
       if (v) { voices[pad]?.stop(time); voices[pad] = v; }
       return true;
     });
+    const out = await off.startRendering();
+    return [out.getChannelData(0).slice(frames, frames * 2), out.getChannelData(1).slice(frames, frames * 2)];
+  }
+
+  /** Render one pad hit with its pitch, reverse and effects (and the echo tail) to stereo sample data. */
+  async renderPad(i: number, sampleRate = 44100): Promise<Float32Array[] | null> {
+    const p = getProject();
+    const pad = p.pads[i];
+    const buf = pad.sampleId ? this.buffers.get(pad.sampleId) : undefined;
+    if (!buf) return null;
+    const played = (pad.end - pad.start) / Math.pow(2, pad.semitones / 12);
+    const fx = pad.fx;
+    const echo = (DELAY_TIMES[fx.delayTime] * 60) / p.bpm;
+    // Echo tail: until the repeats have decayed by 60 dB, at most 8 seconds.
+    const tail = fx.delayMix > 0 ? Math.min(8, echo * (1 + (fx.delayFeedback > 0 ? Math.log(0.001) / Math.log(fx.delayFeedback) : 0))) : 0.02;
+    const { off, mixer, rev } = this.offline(played + tail, sampleRate);
+    playPadVoice(mixer, i, buf, pad.reverse ? rev(pad.sampleId!) : null, { ...pad, gain: 1 }, 0, 1);
     const out = await off.startRendering();
     return [out.getChannelData(0), out.getChannelData(1)];
   }

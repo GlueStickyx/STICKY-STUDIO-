@@ -3,8 +3,9 @@ import { engine } from '../audio/engine';
 import { canRedo, canUndo, dispatch, getProject, redo, subscribe, undo } from '../core/bus';
 import { loopTicks } from '../core/sequence';
 import { BANK_COUNT, BANK_NAMES, BAR_TICKS, PAD_COUNT, PPQ, STEP_TICKS, TOTAL_PADS, bankOf, padLabel, sliceBounds } from '../core/types';
-import type { Project } from '../core/types';
-import { autoSlice, boot, exportLoopWav, gridSlice, importFile, onSaveState, saveState } from './actions';
+import { DELAY_TIMES, STUTTERS, fxActive } from '../core/types';
+import type { FilterType, PadFx, Project } from '../core/types';
+import { autoSlice, boot, exportLoopWav, gridSlice, importFile, onSaveState, resamplePad, saveState } from './actions';
 import { padHue } from './colors';
 import { inArtifact } from '../ai/viewer';
 import { Chat } from './Chat';
@@ -47,7 +48,7 @@ function Studio() {
   const p = useProject();
   const [, force] = useState(0);
   const [tool, setTool] = useState<Tool>('play');
-  const [panel, setPanel] = useState<'steps' | 'pad'>('steps');
+  const [panel, setPanel] = useState<'steps' | 'pad' | 'fx'>('steps');
   const [msg, setMsg] = useState<string | null>(null);
   const [chat, setChat] = useState(false);
   useEffect(() => { if (!msg) return; const t = setTimeout(() => setMsg(null), 4000); return () => clearTimeout(t); }, [msg]);
@@ -77,8 +78,9 @@ function Studio() {
           <div className="tabs" role="tablist">
             <button role="tab" aria-selected={panel === 'steps'} className={panel === 'steps' ? 'tab on' : 'tab'} onClick={() => setPanel('steps')}>Steps</button>
             <button role="tab" aria-selected={panel === 'pad'} className={panel === 'pad' ? 'tab on' : 'tab'} onClick={() => setPanel('pad')}>Pad {padLabel(p.selectedPad)}</button>
+            <button id="tab-fx" role="tab" aria-selected={panel === 'fx'} className={panel === 'fx' ? 'tab on' : 'tab'} onClick={() => setPanel('fx')}>FX{fxActive(p.pads[p.selectedPad].fx) ? ' •' : ''}</button>
           </div>
-          {panel === 'steps' ? <Steps p={p} /> : <PadEdit p={p} />}
+          {panel === 'steps' ? <Steps p={p} /> : panel === 'pad' ? <PadEdit p={p} /> : <FxEdit p={p} say={setMsg} />}
         </div>
       </section>
     </div>
@@ -298,6 +300,68 @@ function PadEdit({ p }: { p: Project }) {
         <button className="btn danger" onClick={() => dispatch('pad.clear', { pad: i })}>Clear pad</button>
       </div>
       <p className="hint">Pitch changes speed too, like a classic sampler.</p>
+    </div>
+  );
+}
+
+const FILTERS: [FilterType, string][] = [['off', 'Off'], ['lowpass', 'Low-pass'], ['highpass', 'High-pass'], ['bandpass', 'Band-pass']];
+// Cutoff slider is logarithmic: 0..1 maps to 40 Hz..16 kHz.
+const hzOf = (x: number) => 40 * Math.pow(400, x);
+const posOf = (hz: number) => Math.log(hz / 40) / Math.log(400);
+
+function FxEdit({ p, say }: { p: Project; say: (m: string | null) => void }) {
+  const i = p.selectedPad, pad = p.pads[i], fx = pad.fx;
+  const [busy, setBusy] = useState(false);
+  if (!pad.sampleId) return <div className="panel"><p className="panel-title">Pad {padLabel(i)} is empty</p><p className="hint">Effects apply to a pad's sound. Send a slice to this pad first.</p></div>;
+  const set = (patch: Partial<PadFx>, key: string) => dispatch('pad.setFx', { pad: i, fx: patch }, { group: `fx-${key}-${i}` });
+  const hit = () => engine.hitPad(i);
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  return (
+    <div className="panel">
+      <p className="panel-title">Pad {padLabel(i)} effects</p>
+      <div className="fx-row">
+        <span className="fx-name">Filter</span>
+        <div className="seg" role="radiogroup" aria-label="Filter type">
+          {FILTERS.map(([t, label]) => <button key={t} id={`fx-filter-${t}`} role="radio" aria-checked={fx.filter === t} className={fx.filter === t ? 'btn small on' : 'btn small'} onClick={() => { set({ filter: t }, 'filter'); }}>{label}</button>)}
+        </div>
+      </div>
+      {fx.filter !== 'off' && (
+        <div className="fx-pair">
+          <label className="slider">Cutoff <span>{fx.cutoff >= 1000 ? `${(fx.cutoff / 1000).toFixed(1)} kHz` : `${Math.round(fx.cutoff)} Hz`}</span>
+            <input id="fx-cutoff" type="range" min={0} max={1} step={0.005} value={posOf(fx.cutoff)} onChange={(e) => set({ cutoff: hzOf(Number(e.target.value)) }, 'cutoff')} /></label>
+          <label className="slider">Resonance <span>{pct(fx.resonance)}</span>
+            <input id="fx-res" type="range" min={0} max={1} step={0.01} value={fx.resonance} onChange={(e) => set({ resonance: Number(e.target.value) }, 'res')} /></label>
+        </div>
+      )}
+      <label className="slider">Drive <span>{pct(fx.drive)}</span>
+        <input id="fx-drive" type="range" min={0} max={1} step={0.01} value={fx.drive} onChange={(e) => set({ drive: Number(e.target.value) }, 'drive')} /></label>
+      <label className="slider">Echo <span>{fx.delayMix > 0 ? pct(fx.delayMix) : 'Off'}</span>
+        <input id="fx-delay" type="range" min={0} max={1} step={0.01} value={fx.delayMix} onChange={(e) => set({ delayMix: Number(e.target.value) }, 'delay')} /></label>
+      {fx.delayMix > 0 && (
+        <div className="fx-pair">
+          <div className="fx-row">
+            <span className="fx-name">Time</span>
+            <div className="seg" role="radiogroup" aria-label="Echo time">
+              {(Object.keys(DELAY_TIMES) as (keyof typeof DELAY_TIMES)[]).map((t) => <button key={t} id={`fx-time-${t.replace('/', '-')}`} role="radio" aria-checked={fx.delayTime === t} className={fx.delayTime === t ? 'btn small on' : 'btn small'} onClick={() => set({ delayTime: t }, 'time')}>{t === '1/8d' ? '1/8 dot' : t}</button>)}
+            </div>
+          </div>
+          <label className="slider">Repeats <span>{pct(fx.delayFeedback / 0.85)}</span>
+            <input id="fx-feedback" type="range" min={0} max={0.85} step={0.01} value={fx.delayFeedback} onChange={(e) => set({ delayFeedback: Number(e.target.value) }, 'fb')} /></label>
+        </div>
+      )}
+      <div className="fx-row">
+        <span className="fx-name">Stutter</span>
+        <div className="seg" role="radiogroup" aria-label="Stutter">
+          {STUTTERS.map((n) => <button key={n} id={`fx-stutter-${n}`} role="radio" aria-checked={fx.stutter === n} className={fx.stutter === n ? 'btn small on' : 'btn small'} onClick={() => set({ stutter: n }, 'stutter')}>{n === 1 ? 'Off' : `×${n}`}</button>)}
+        </div>
+      </div>
+      <div className="row">
+        <button id="fx-hear" className="btn" onClick={hit}>Hear it</button>
+        <button id="fx-reset" className="btn" disabled={!fxActive(fx)} onClick={() => dispatch('pad.resetFx', { pad: i })}>Remove effects</button>
+        <button id="fx-resample" className="btn primary" disabled={busy}
+          onClick={async () => { setBusy(true); try { say(await resamplePad(i)); } catch { say('Resampling failed. Try again.'); } setBusy(false); }}>{busy ? 'Rendering…' : 'Resample'}</button>
+      </div>
+      <p className="hint">Resample prints this pad with its pitch and effects into a new sample, so you can chop it again or stack more effects on top.</p>
     </div>
   );
 }

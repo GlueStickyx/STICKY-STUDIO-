@@ -3,7 +3,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { describeAudio, detectTransients } from '../audio/analysis';
 import { dispatch, getProject } from '../core/bus';
-import { BANK_NAMES, PAD_COUNT, STEP_COUNT, TOTAL_PADS, bankOf, padLabel, parsePad, sliceBounds } from '../core/types';
+import { BANK_NAMES, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, fxActive, padLabel, parsePad, sliceBounds } from '../core/types';
 
 /** What the tools need from the running studio. Injected so the tools can be tested without audio hardware. */
 export interface StudioDeps {
@@ -62,6 +62,23 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
     }, ['pads']),
   },
   {
+    name: 'set_pad_effects',
+    description: 'Set effects on one or more pads. Only include the fields you want to change. Filter: off, lowpass, highpass or bandpass with cutoff in Hz and resonance 0-1. Drive 0-1 is saturation (0.2 warm, 0.6 crunchy, 1 destroyed). Echo: echo_level 0-1 (0 = off), echo_time synced to tempo, echo_repeats 0-1. Stutter N plays the first 1/N of the slice N times (1 = off). Set reset true to remove all effects from a pad first.',
+    input_schema: obj({
+      pads: {
+        type: 'array', minItems: 1,
+        items: obj({
+          pad: padProp, reset: { type: 'boolean' },
+          filter: { type: 'string', enum: ['off', 'lowpass', 'highpass', 'bandpass'] },
+          cutoff_hz: { type: 'number', minimum: 40, maximum: 16000 }, resonance: { type: 'number', minimum: 0, maximum: 1 },
+          drive: { type: 'number', minimum: 0, maximum: 1 },
+          echo_level: { type: 'number', minimum: 0, maximum: 1 }, echo_time: { type: 'string', enum: Object.keys(DELAY_TIMES) }, echo_repeats: { type: 'number', minimum: 0, maximum: 1 },
+          stutter: { type: 'integer', enum: [...STUTTERS] },
+        }, ['pad']),
+      },
+    }, ['pads']),
+  },
+  {
     name: 'slice_sample',
     description: 'Re-slice the sample currently shown in the chop view. "transients" cuts at detected hits (sensitivity 0-1, higher = more slices); "grid" cuts into equal parts. Optionally send the slices to pads, which replaces what those pads play: they fill the chosen bank from pad 1 and continue into later banks (64 pads in total).',
     input_schema: obj({
@@ -104,6 +121,7 @@ function stateJson(deps: StudioDeps): string {
       return {
         pad: padLabel(i), sample: s.name, from_seconds: +pad.start.toFixed(3), to_seconds: +pad.end.toFixed(3),
         volume_percent: Math.round(pad.gain * 100), semitones: pad.semitones, reverse: pad.reverse,
+        ...(fxActive(pad.fx) ? { effects: { filter: pad.fx.filter, cutoff_hz: Math.round(pad.fx.cutoff), resonance: pad.fx.resonance, drive: pad.fx.drive, echo_level: pad.fx.delayMix, echo_time: pad.fx.delayTime, echo_repeats: +(pad.fx.delayFeedback / 0.85).toFixed(2), stutter: pad.fx.stutter } } : {}),
         steps: stepString(pad.steps), recorded_hits: p.events.filter((e) => e.pad === i).length,
       };
     }),
@@ -168,6 +186,26 @@ export function runTool(name: string, input: unknown, deps: StudioDeps, group: s
         run('pad.set', { pad: padIx(e.pad), gain: e.volume_percent !== undefined ? e.volume_percent / 100 : undefined, semitones: e.semitones, reverse: e.reverse });
       }
       return ok('Done.', `Edited pad ${a.pads.map((e: any) => padLabel(padIx(e.pad))).join(', ')}`);
+    }
+
+    case 'set_pad_effects': {
+      if (!Array.isArray(a.pads) || !a.pads.length) return fail('pads must be a non-empty array.');
+      const unit = (v: unknown) => v === undefined || (isNum(v) && v >= 0 && v <= 1);
+      for (const e of a.pads) {
+        if (!isPad(e?.pad)) return fail(`Each entry needs pad: ${BAD_PAD}.`);
+        if (!p.pads[padIx(e.pad)].sampleId) return fail(`Pad ${e.pad} is empty; effects need a sound.`);
+        if (e.filter !== undefined && !['off', 'lowpass', 'highpass', 'bandpass'].includes(e.filter)) return fail('filter must be off, lowpass, highpass or bandpass.');
+        if (e.cutoff_hz !== undefined && (!isNum(e.cutoff_hz) || e.cutoff_hz < 40 || e.cutoff_hz > 16000)) return fail('cutoff_hz must be 40 to 16000.');
+        if (![e.resonance, e.drive, e.echo_level, e.echo_repeats].every(unit)) return fail('resonance, drive, echo_level and echo_repeats must each be 0 to 1.');
+        if (e.echo_time !== undefined && !(e.echo_time in DELAY_TIMES)) return fail(`echo_time must be one of ${Object.keys(DELAY_TIMES).join(', ')}.`);
+        if (e.stutter !== undefined && !(STUTTERS as readonly number[]).includes(e.stutter)) return fail(`stutter must be one of ${STUTTERS.join(', ')}.`);
+      }
+      for (const e of a.pads) {
+        const pad = padIx(e.pad);
+        if (e.reset) run('pad.resetFx', { pad });
+        run('pad.setFx', { pad, fx: { filter: e.filter, cutoff: e.cutoff_hz, resonance: e.resonance, drive: e.drive, delayMix: e.echo_level, delayTime: e.echo_time, delayFeedback: e.echo_repeats === undefined ? undefined : e.echo_repeats * 0.85, stutter: e.stutter } });
+      }
+      return ok('Done.', `Set effects on pad ${a.pads.map((e: any) => padLabel(padIx(e.pad))).join(', ')}`);
     }
 
     case 'slice_sample': {

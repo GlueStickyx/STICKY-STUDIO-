@@ -20,6 +20,25 @@ export interface Sample {
   bpm: number | null;
 }
 
+export type FilterType = 'off' | 'lowpass' | 'highpass' | 'bandpass';
+export const DELAY_TIMES = { '1/16': 0.25, '1/8': 0.5, '1/8d': 0.75, '1/4': 1 } as const; // in beats
+export type DelayTime = keyof typeof DELAY_TIMES;
+export const STUTTERS = [1, 2, 3, 4, 6, 8] as const;
+
+/** Per-pad effects. Applied identically in live playback and in export. */
+export interface PadFx {
+  filter: FilterType;
+  cutoff: number; // Hz, 40..16000
+  resonance: number; // 0..1
+  drive: number; // 0..1, saturation amount
+  delayMix: number; // 0..1, level of the echoes (the dry sound stays at full level)
+  delayTime: DelayTime; // tempo-synced
+  delayFeedback: number; // 0..0.85
+  stutter: number; // 1 = off; N = the first 1/N of the slice repeated N times
+}
+export const defaultFx = (): PadFx => ({ filter: 'off', cutoff: 2000, resonance: 0.2, drive: 0, delayMix: 0, delayTime: '1/8d', delayFeedback: 0.4, stutter: 1 });
+export const fxActive = (fx: PadFx) => fx.filter !== 'off' || fx.drive > 0 || fx.delayMix > 0 || fx.stutter > 1;
+
 export interface Pad {
   sampleId: string | null;
   start: number; // seconds into the sample
@@ -27,6 +46,7 @@ export interface Pad {
   gain: number; // 0..1.5
   semitones: number; // -12..12, repitch by playback rate
   reverse: boolean;
+  fx: PadFx;
   /** Step sequencer row: velocity 0..1 per 16th note, 0 = off. */
   steps: number[];
 }
@@ -55,7 +75,7 @@ export interface Project {
 }
 
 export function emptyPad(): Pad {
-  return { sampleId: null, start: 0, end: 0, gain: 1, semitones: 0, reverse: false, steps: new Array(STEP_COUNT).fill(0) };
+  return { sampleId: null, start: 0, end: 0, gain: 1, semitones: 0, reverse: false, fx: defaultFx(), steps: new Array(STEP_COUNT).fill(0) };
 }
 
 export function emptyProject(): Project {
@@ -79,7 +99,7 @@ export function parsePad(label: unknown): number | null {
 }
 /** Bring a project saved by an older version up to the current shape. */
 export function normalizeProject(p: Project): Project {
-  const pads = Array.from({ length: TOTAL_PADS }, (_, i) => p.pads[i] ?? emptyPad());
+  const pads = Array.from({ length: TOTAL_PADS }, (_, i) => (p.pads[i] ? { ...p.pads[i], fx: { ...defaultFx(), ...p.pads[i].fx } } : emptyPad()));
   return { ...p, pads, selectedPad: Math.min(Math.max(0, p.selectedPad ?? 0), TOTAL_PADS - 1) };
 }
 

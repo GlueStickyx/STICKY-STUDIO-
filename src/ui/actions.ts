@@ -6,7 +6,7 @@ import { zipSingle } from '../audio/zip';
 import { useDownloads } from '../ai/viewer';
 import { dispatch, getProject, loadProject, subscribe } from '../core/bus';
 import { loadAudio, loadSavedProject, requestPersistence, saveAudio, saveProject } from '../core/storage';
-import { emptyProject, normalizeProject, uid } from '../core/types';
+import { emptyProject, normalizeProject, padLabel, uid } from '../core/types';
 import type { Sample } from '../core/types';
 
 export function monoOf(id: string): { mono: Float32Array; sampleRate: number } | null {
@@ -17,7 +17,7 @@ export function monoOf(id: string): { mono: Float32Array; sampleRate: number } |
   return { mono: mixToMono(ch), sampleRate: b.sampleRate };
 }
 
-async function addSample(name: string, bytes: ArrayBuffer): Promise<Sample> {
+async function addSample(name: string, bytes: ArrayBuffer, group?: string): Promise<Sample> {
   const buf = await engine.decode(bytes);
   const id = uid();
   engine.addBuffer(id, buf);
@@ -26,7 +26,7 @@ async function addSample(name: string, bytes: ArrayBuffer): Promise<Sample> {
   const bpm = estimateBpm(m.mono.subarray(0, Math.min(m.mono.length, m.sampleRate * 60)), m.sampleRate);
   const sample: Sample = { id, name, duration: buf.duration, sampleRate: buf.sampleRate, markers: [], bpm };
   await saveAudio(id, bytes);
-  dispatch('sample.add', { sample });
+  dispatch('sample.add', { sample }, group ? { group, sticky: true } : {});
   return sample;
 }
 
@@ -63,6 +63,24 @@ async function seedDemo() {
   dispatch('seq.setRow', { pad: 0, steps: row([0, 10]) });
   dispatch('seq.setRow', { pad: 2, steps: row([4, 12]) });
   dispatch('seq.setRow', { pad: 1, steps: row([2, 6, 14]).map((v) => v * 0.6) });
+}
+
+/**
+ * Resample: print a pad with its pitch, reverse and effects into a new sample, and point the pad at it
+ * with the effects cleared. One undo step. Returns a sentence for the UI.
+ */
+export async function resamplePad(i: number): Promise<string> {
+  const pad = getProject().pads[i];
+  const src = getProject().samples.find((s) => s.id === pad.sampleId);
+  const ch = src ? await engine.renderPad(i) : null;
+  if (!src || !ch) return 'This pad is empty.';
+  const group = 'resample-' + uid();
+  const s = await addSample(`${src.name} ${padLabel(i)} resampled`, encodeWav(ch, 44100), group);
+  const opt = { group, sticky: true };
+  dispatch('pad.assign', { pad: i, sampleId: s.id, start: 0, end: s.duration }, opt);
+  dispatch('pad.set', { pad: i, semitones: 0, reverse: false }, opt);
+  dispatch('pad.resetFx', { pad: i }, opt);
+  return `Pad ${padLabel(i)} now plays the resampled sound. It is in the sample list for further chopping.`;
 }
 
 let saveTimer: number | null = null;
