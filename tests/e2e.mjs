@@ -101,6 +101,55 @@ try {
   await page.waitForSelector('.toast');
   check('unreadable file shows a message', (await page.locator('.toast').innerText()).includes('Could not read'));
 
+  // Assistant, with Anthropic's API replaced by a scripted reply: one tool call, then a sentence.
+  const sse = (events) => events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
+  const start = { type: 'message_start', message: { id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-opus-5-5', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 1 } } };
+  const end = (reason) => [{ type: 'message_delta', delta: { stop_reason: reason, stop_sequence: null }, usage: { output_tokens: 9 } }, { type: 'message_stop' }];
+  const pattern = { patterns: [{ pad: 9, steps: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0] }] };
+  const bodies = [];
+  let mode = 'ok';
+  await page.route('https://api.anthropic.com/**', async (route) => {
+    const req = route.request();
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    if (mode === '401') return route.fulfill({ status: 401, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }) });
+    bodies.push({ json: req.postDataJSON(), headers: req.headers() });
+    const body = bodies.length === 1
+      ? sse([start, { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'toolu_1', name: 'write_patterns', input: {} } },
+          { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(pattern) } },
+          { type: 'content_block_stop', index: 0 }, ...end('tool_use')])
+      : sse([start, { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+          { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Four on the floor on pad 9.' } },
+          { type: 'content_block_stop', index: 0 }, ...end('end_turn')]);
+    return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body });
+  });
+  await page.click('#assistant');
+  await page.fill('#api-key', 'sk-ant-test-key');
+  await page.click('#save-key');
+  await page.fill('#chat-input', 'four on the floor on pad 9');
+  await page.click('#chat-send');
+  await page.waitForSelector('.msg.assistant:has-text("Four on the floor")');
+  check('assistant reply is shown', true);
+  check('assistant change is logged', await page.locator('.change:has-text("Wrote patterns for pad 9")').count() === 1);
+  check('request used the expected model, tools and cached system prompt',
+    bodies[0].json.model === 'claude-opus-5-5' && bodies[0].json.tools.length >= 6 && bodies[0].json.system[0].cache_control?.type === 'ephemeral' && bodies[0].json.stream === true);
+  if (process.env.DEBUG_HEADERS) console.log(Object.keys(bodies[0].headers).join(' '));
+  check('request carried the key and browser-access header', (bodies[0].headers['x-api-key'] === 'sk-ant-test-key' || (bodies[0].headers['authorization'] ?? '').includes('sk-ant-test-key')) && bodies[0].headers['anthropic-dangerous-direct-browser-access'] === 'true');
+  const second = bodies[1].json.messages;
+  check('tool result was sent back in one user message', second.length === 3 && second[2].role === 'user' && second[2].content[0].type === 'tool_result' && second[2].content[0].tool_use_id === 'toolu_1' && !second[2].content[0].is_error);
+  await page.dispatchEvent('#pad-8', 'pointerdown');
+  await page.click('.tab:has-text("Steps")');
+  check('assistant pattern is in the sequencer', await page.locator('.step.on').count() === 4 && await page.locator('.step.soft').count() === 1);
+  await page.click('text=Undo these changes');
+  check('one tap undoes the assistant turn', await page.locator('.step.on').count() === 0);
+  mode = '401';
+  await page.fill('#chat-input', 'again');
+  await page.click('#chat-send');
+  await page.waitForSelector('.msg.error');
+  check('a rejected key gives a clear message', (await page.locator('.msg.error').innerText()).includes('rejected the API key'));
+  if (shots) await page.screenshot({ path: `${shots}/assistant.png` });
+  await page.click('#chat-close');
+
   if (shots) await page.screenshot({ path: `${shots}/landscape.png` });
 
   // Autosave: reload and the imported sample is still there.
@@ -119,7 +168,7 @@ try {
   check('phone width has no sideways scroll', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   if (shots) await page.screenshot({ path: `${shots}/phone.png`, fullPage: true });
 
-  check('no console errors', errors.filter((e) => !e.includes('Unable to decode')).length === 0, errors.join(' | '));
+  check('no console errors', errors.filter((e) => !e.includes('Unable to decode') && !e.includes('401')).length === 0, errors.join(' | '));
 } finally {
   await browser.close();
   await new Promise((r) => server.httpServer.close(r));

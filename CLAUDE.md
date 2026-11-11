@@ -15,7 +15,10 @@ toward a full studio. A desktop build with real VST hosting is the long-term goa
 5. Touch first: controls at least 44px, pads large, `touch-action` set on anything dragged.
 6. Every audio feature has a test: pure logic in `tests/*.test.ts` (vitest), behaviour in a real
    browser in `tests/e2e.mjs` (renders audio and checks the samples).
-7. Do not add a library or change these rules without asking.
+7. Do not add a library or change these rules without asking. In use: React, and the
+   official `@anthropic-ai/sdk` for the assistant (added with the assistant slice; owner told, may veto).
+8. The assistant (`src/ai/`) changes the studio only through `runTool()` -> `dispatch()`, validates
+   every model-supplied input, and groups each turn into one undo step.
 
 ## Commands
 
@@ -26,8 +29,9 @@ toward a full studio. A desktop build with real VST hosting is the long-term goa
 ## Build order
 
 Done: import, chop (manual + transient + grid), 16 pads, pad edit, loop recording of pad hits,
-step sequencer, undo/redo, autosave, WAV export.
+step sequencer, undo/redo, autosave, WAV export, AI assistant (Claude, owner's own API key).
 
-Next, one slice at a time: AI assistant over the command bus → mic sampling and pad banks →
+Next, one slice at a time: mic sampling and pad banks →
 piano roll and MIDI → FX/mutation lab → Suno studio tab → stems → clip launcher and arrangement →
-workflow canvas → desktop shell with plugin hosting.
+knowledge library and local-model/MCP connections for the assistant → workflow canvas →
+desktop shell with plugin hosting.

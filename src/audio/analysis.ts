@@ -128,3 +128,35 @@ export function computePeaks(mono: Float32Array): Float32Array {
   }
   return peaks;
 }
+
+export interface AudioDescription {
+  seconds: number; peak: number; rms: number;
+  /** Share of energy below 200 Hz, 200 Hz-2 kHz, and above 2 kHz. Sums to 1. */
+  low: number; mid: number; high: number;
+  /** Milliseconds from the start to the loudest point: short = percussive. */
+  attackMs: number;
+  hint: string;
+}
+
+/** Numeric description of a piece of audio, so the assistant can tell a kick from a hat without hearing it. */
+export function describeAudio(mono: Float32Array, sampleRate: number): AudioDescription {
+  const r = (v: number, d = 3) => Math.round(v * 10 ** d) / 10 ** d;
+  const aLow = 1 - Math.exp((-2 * Math.PI * 200) / sampleRate), aMid = 1 - Math.exp((-2 * Math.PI * 2000) / sampleRate);
+  let lp1 = 0, lp2 = 0, eLow = 0, eMid = 0, eHigh = 0, sum = 0, peak = 0, peakAt = 0;
+  for (let i = 0; i < mono.length; i++) {
+    const x = mono[i];
+    lp1 += aLow * (x - lp1); lp2 += aMid * (x - lp2);
+    eLow += lp1 * lp1; eMid += (lp2 - lp1) ** 2; eHigh += (x - lp2) ** 2;
+    sum += x * x;
+    if (Math.abs(x) > peak) { peak = Math.abs(x); peakAt = i; }
+  }
+  const total = eLow + eMid + eHigh || 1;
+  const low = eLow / total, mid = eMid / total, high = eHigh / total;
+  const rms = Math.sqrt(sum / Math.max(1, mono.length));
+  const hint = rms < 0.003 ? 'near silence'
+    : low > 0.6 ? 'low and heavy: kick or bass note'
+    : high > 0.5 ? 'bright or noisy: hat, cymbal, shaker or snare top'
+    : low > 0.3 && high > 0.2 ? 'full range: kick with something on top, or a full mix'
+    : 'mid-focused: snare, vocal, chord or melodic material';
+  return { seconds: r(mono.length / sampleRate), peak: r(peak), rms: r(rms), low: r(low, 2), mid: r(mid, 2), high: r(high, 2), attackMs: Math.round((peakAt / sampleRate) * 1000), hint };
+}

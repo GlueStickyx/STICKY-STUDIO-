@@ -101,16 +101,16 @@ export function subscribe(l: () => void) { listeners.add(l); return () => { list
 
 /**
  * Run a named command. `group` merges rapid repeats (a slider drag, one recording take)
- * into a single undo step.
+ * into a single undo step. `sticky` groups have no time limit (one assistant turn = one undo step).
  */
-export function dispatch(name: string, args: any = {}, opts: { group?: string } = {}) {
+export function dispatch(name: string, args: any = {}, opts: { group?: string; sticky?: boolean } = {}) {
   const cmd = commands[name];
   if (!cmd) throw new Error(`Unknown command: ${name}`);
   const next = cmd.run(state, args);
   if (next === state) return;
   if (cmd.undoable) {
     const now = Date.now();
-    const merged = !!opts.group && opts.group === lastKey && now - lastTime < 1500;
+    const merged = !!opts.group && opts.group === lastKey && (!!opts.sticky || now - lastTime < 1500);
     if (!merged) { past.push(state); if (past.length > HISTORY_LIMIT) past.shift(); }
     future = [];
     lastKey = opts.group ?? '';
@@ -127,6 +127,8 @@ function keepSettings(target: Project): Project {
 }
 export function undo() { const prev = past.pop(); if (!prev) return; future.push(state); state = keepSettings(prev); lastKey = ''; emit(); }
 export function redo() { const next = future.pop(); if (!next) return; past.push(state); state = keepSettings(next); lastKey = ''; emit(); }
+/** Group key of the newest undo step, or '' if it was not grouped. */
+export const lastGroup = () => lastKey;
 export const canUndo = () => past.length > 0;
 export const canRedo = () => future.length > 0;
 

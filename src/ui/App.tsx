@@ -6,6 +6,7 @@ import { BAR_TICKS, PPQ, STEP_TICKS, sliceBounds } from '../core/types';
 import type { Project } from '../core/types';
 import { autoSlice, boot, exportLoopWav, gridSlice, importFile, onSaveState, saveState } from './actions';
 import { padHue } from './colors';
+import { Chat } from './Chat';
 import { Waveform } from './Waveform';
 import type { Tool } from './Waveform';
 
@@ -47,6 +48,7 @@ function Studio() {
   const [tool, setTool] = useState<Tool>('play');
   const [panel, setPanel] = useState<'steps' | 'pad'>('steps');
   const [msg, setMsg] = useState<string | null>(null);
+  const [chat, setChat] = useState(false);
   useEffect(() => { if (!msg) return; const t = setTimeout(() => setMsg(null), 4000); return () => clearTimeout(t); }, [msg]);
   useEffect(() => { engine.onTransport = () => force((n) => n + 1); return onSaveState(() => force((n) => n + 1)); }, []);
   useEffect(() => { // keep the screen awake while the studio is open, where the browser allows it
@@ -59,8 +61,9 @@ function Studio() {
   }, []);
   const sample = p.samples.find((s) => s.id === p.activeSampleId) ?? null;
   return (
-    <div className="studio">
-      <Transport p={p} say={setMsg} />
+    <div className={chat ? 'studio with-chat' : 'studio'}>
+      {chat && <Chat onClose={() => setChat(false)} />}
+      <Transport p={p} say={setMsg} chat={chat} toggleChat={() => setChat(!chat)} />
       {msg && <div className="toast" role="status" onClick={() => setMsg(null)}>{msg}</div>}
       <section className="chop">
         <ChopBar p={p} tool={tool} setTool={setTool} say={setMsg} />
@@ -81,7 +84,7 @@ function Studio() {
   );
 }
 
-function Transport({ p, say }: { p: Project; say: (m: string | null) => void }) {
+function Transport({ p, say, chat, toggleChat }: { p: Project; say: (m: string | null) => void; chat: boolean; toggleChat: () => void }) {
   const pos = useTick(() => Math.floor(engine.position() / (PPQ / 4)));
   const taps = useRef<number[]>([]);
   const [busy, setBusy] = useState(false);
@@ -127,6 +130,7 @@ function Transport({ p, say }: { p: Project; say: (m: string | null) => void }) 
         <button id="export" className="btn primary" disabled={busy}
           onClick={async () => { setBusy(true); try { await exportLoopWav(); say('Loop saved as a WAV file.'); } catch { say('Export failed. Try again.'); } setBusy(false); }}>
           {busy ? 'Rendering…' : 'Export WAV'}</button>
+        <button id="assistant" className={chat ? 'btn on' : 'btn'} aria-pressed={chat} onClick={toggleChat}>Assistant</button>
         <span className="meta" title="Output delay reported by the browser">
           {lat !== null ? `${lat} ms` : ''}{saveState === 'off' ? ' · not saving' : saveState === 'saving' ? ' · saving' : ' · saved'}
         </span>
