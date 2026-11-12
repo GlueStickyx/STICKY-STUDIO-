@@ -7,7 +7,8 @@ import fs from 'node:fs';
 const out = process.argv[2] ?? 'artifact/sticky-studio.html';
 const result = await build({
   configFile: false, base: './', plugins: [react()], logLevel: 'warn',
-  build: { write: false, target: 'es2021', cssCodeSplit: false, rollupOptions: { output: { inlineDynamicImports: true } } },
+  build: { write: false, target: 'es2021', cssCodeSplit: false, assetsInlineLimit: 100_000_000, // guide pictures travel inside the one file
+    rollupOptions: { output: { inlineDynamicImports: true } } },
 });
 const files = (Array.isArray(result) ? result[0] : result).output;
 const js = files.filter((f) => f.type === 'chunk').map((f) => f.code).join('\n');

@@ -9,6 +9,7 @@ import { connectMidi, midiSupported, setMidiMode } from '../audio/midiin';
 import { NOTE_NAMES, SCALES } from '../core/types';
 import type { ScaleName } from '../core/types';
 import { autoSlice, boot, exportLoopWav, exportMidi, gridSlice, importFile, importMidi, onSaveState, resamplePad, savePadToLibrary, saveSampleToLibrary, saveState } from './actions';
+import { Guide } from './Guide';
 import { Library } from './Library';
 import { PianoRoll } from './PianoRoll';
 import { padHue } from './colors';
@@ -75,6 +76,7 @@ function Studio() {
     <div className={chat ? 'studio with-chat' : 'studio'}>
       {chat && <Chat onClose={() => setChat(false)} />}
       {sheet === 'library' && <Library onClose={() => setSheet(null)} say={setMsg} />}
+      {sheet === 'guide' && <Guide onClose={() => setSheet(null)} />}
       <Transport p={p} say={setMsg} chat={chat} toggleChat={() => setChat(!chat)} openSheet={setSheet} />
       {msg && <div className="toast" role="status" onClick={() => setMsg(null)}>{msg}</div>}
       <section className="chop">
@@ -155,6 +157,7 @@ function Transport({ p, say, chat, toggleChat, openSheet }: { p: Project; say: (
           {busy ? 'Rendering…' : inArtifact() ? 'Export loop' : 'Export WAV'}</button>
         <button id="library" className="btn" onClick={() => openSheet('library')}>Library</button>
         <button id="assistant" className={chat ? 'btn on' : 'btn'} aria-pressed={chat} onClick={toggleChat}>Assistant</button>
+        <button id="guide" className="btn" onClick={() => openSheet('guide')}>Guide</button>
         <span className="meta" title="Output delay reported by the browser">
           {lat !== null ? `${lat} ms` : ''}{saveState === 'off' ? ' · not saving' : saveState === 'saving' ? ' · saving' : ' · saved'}
         </span>

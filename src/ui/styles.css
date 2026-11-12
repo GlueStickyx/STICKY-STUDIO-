@@ -151,6 +151,35 @@ input[type="range"] { accent-color: var(--accent); min-height: 32px; touch-actio
 .lib-empty { flex: none; padding: 28px 18px; text-align: center; }
 .lib-empty p { margin: 0; max-width: 52ch; }
 
+.guide { flex: 1; min-height: 0; display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 16px; }
+.guide-nav { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
+.guide-nav .btn { text-align: left; white-space: normal; }
+.guide-page { overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; line-height: 1.5; }
+.guide-page h3 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.01em; }
+.guide-page p { margin: 0 0 10px; max-width: 70ch; }
+.flows { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 4px; }
+.flow { background: var(--surface); border-radius: var(--radius); padding: 12px 14px; }
+.flow h4 { margin: 0 0 6px; font-size: 15px; }
+.flow ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.shot-wrap { overflow-x: auto; margin: 4px 0 14px; padding: 12px 12px 4px; background: #0c0d0f; border: 1px solid var(--line); border-radius: var(--radius); }
+.shot { position: relative; width: 100%; }
+.shot img { display: block; width: 100%; height: 100%; border-radius: 4px; }
+.mark {
+  position: absolute; transform: translate(-50%, -50%); width: 22px; height: 22px; padding: 0; border-radius: 50%;
+  border: 2px solid #131417; background: var(--accent); color: #17150a; font: 700 11px/1 var(--mono); cursor: pointer;
+  display: grid; place-items: center; box-shadow: 0 1px 4px #000a;
+}
+.mark.hot { background: #fff; transform: translate(-50%, -50%) scale(1.35); z-index: 2; }
+.mark.static { position: static; transform: none; flex: none; cursor: default; box-shadow: none; }
+.mark-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 6px 14px; }
+.mark-list li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: var(--radius); background: var(--surface); }
+.mark-list li.hot { outline: 2px solid var(--accent); }
+.mark-list p { margin: 2px 0 0; color: var(--dim); max-width: none; }
+.guide-note { background: var(--surface); border-radius: var(--radius); padding: 10px 12px; color: var(--dim); }
+.keys { border-collapse: collapse; margin-bottom: 12px; }
+.keys td { padding: 6px 18px 6px 0; }
+kbd { display: inline-block; min-width: 26px; text-align: center; padding: 3px 7px; margin-right: 4px; border-radius: 5px; border: 1px solid var(--line); border-bottom-width: 3px; background: var(--raised); font: 600 13px var(--mono); }
+
 /* Assistant sheet: docks on the right in landscape, slides over the bottom in portrait. */
 .studio.with-chat { padding-right: calc(min(380px, 42vw) + 16px + env(safe-area-inset-right, 0px)); }
 .chat {
@@ -191,6 +220,9 @@ input[type="range"] { accent-color: var(--accent); min-height: 32px; touch-actio
   .banks { flex-direction: row; width: min(100%, 520px); }
   .pads { width: min(100%, 520px); }
   .group.end { margin-left: 0; }
+  .guide { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .guide-nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; }
+  .guide-nav .btn { white-space: nowrap; flex: none; }
   .studio.with-chat { padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-bottom: 62vh; }
   .chat { top: auto; left: 0; width: auto; height: 60vh; border-left: 0; border-top: 1px solid var(--line); padding-left: max(10px, env(safe-area-inset-left, 0px)); }
 }

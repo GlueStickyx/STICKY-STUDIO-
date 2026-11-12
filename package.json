@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "e2e": "node tests/e2e.mjs",
-    "build:artifact": "node scripts/build-artifact.mjs"
+    "build:artifact": "node scripts/build-artifact.mjs",
+    "guide": "vite build && node scripts/guide-shots.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

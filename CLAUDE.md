@@ -26,6 +26,7 @@ toward a full studio. A desktop build with real VST hosting is the long-term goa
 - `npm test` — unit tests
 - `npm run build:artifact` — single-file build for publishing as a Claude artifact (assistant runs
   on the viewer's Claude account via `src/ai/viewer.ts`, no API key)
+- `npm run guide` — rebuild, then re-photograph the app for the Guide (needs Playwright)
 - `npm run build && npm run e2e` — production build, then browser checks (needs Playwright)
 
 ## Build order
@@ -38,6 +39,11 @@ per-pad effects (filter, drive, tempo-synced echo, stutter, reverb, granular str
 resampling a pad into a new sample. Random choices in audio use the seeded `prng()` so export = playback.
 piano roll per pad (the pad's sound repitched, scale-folded rows), MIDI file export/import
 (`src/core/midi.ts`), MIDI keyboard input (`src/audio/midiin.ts`; untested on real hardware).
+library of saved sounds and named projects (`src/core/storage.ts`, `src/ui/Library.tsx`; library data is outside
+the project, so it is not on the command bus or undo stack).
+Guide (`src/ui/Guide.tsx`): text in `src/guide/guide.json`, pictures and marker positions generated from
+the running app. **After changing any screen, run `npm run guide` and rebuild, and update guide.json
+when a control is added, renamed or removed** — the script warns about markers with nothing on screen.
 
 Next, one slice at a time: Suno studio tab → stems → clip launcher and arrangement →
 knowledge library and local-model/MCP connections for the assistant → workflow canvas → mic sampling (owner deferred it; web build only, artifact pages have no microphone) →

@@ -175,6 +175,28 @@ try {
   check('auto-slice finds slices', parseInt(meta) >= 6, meta);
   await page.click('#topads');
 
+  // Guide: every page opens, every picture loads, and every marker has its explanation.
+  await page.click('#guide');
+  check('guide opens on the workflows', await page.locator('.flow').count() >= 6);
+  const pages = await page.locator('.guide-nav .btn').count();
+  let pictures = 0, broken = 0, unexplained = 0;
+  for (let i = 1; i < pages - 1; i++) {
+    await page.locator('.guide-nav .btn').nth(i).click();
+    await page.waitForSelector('.shot img');
+    const ok = await page.evaluate(async () => { const im = document.querySelector('.shot img'); await im.decode().catch(() => {}); return im.naturalWidth > 100; });
+    ok ? pictures++ : broken++;
+    if (await page.locator('.shot .mark').count() !== await page.locator('.mark-list li').count()) unexplained++;
+  }
+  check('every guide picture loads', pictures === pages - 2 && broken === 0, `${pictures} pictures`);
+  check('every numbered marker has an explanation', unexplained === 0);
+  await page.click('#guide-fx');
+  await page.locator('.shot .mark').nth(13).click();
+  check('tapping a marker highlights its explanation', (await page.locator('.mark-list li.hot').innerText()).includes('Resample'));
+  if (shots) await page.screenshot({ path: `${shots}/guide.png` });
+  await page.click('#guide-shortcuts');
+  check('keyboard page lists the shortcuts', await page.locator('.keys tr').count() >= 6);
+  await page.click('#guide-close');
+
   // Library: sounds and projects kept outside the project.
   await page.click('#library');
   await page.waitForSelector('.lib-empty');
