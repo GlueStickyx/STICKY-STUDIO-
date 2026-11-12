@@ -8,7 +8,8 @@ import type { FilterType, PadFx, Project } from '../core/types';
 import { connectMidi, midiSupported, setMidiMode } from '../audio/midiin';
 import { NOTE_NAMES, SCALES } from '../core/types';
 import type { ScaleName } from '../core/types';
-import { autoSlice, boot, exportLoopWav, exportMidi, gridSlice, importFile, importMidi, onSaveState, resamplePad, saveState } from './actions';
+import { autoSlice, boot, exportLoopWav, exportMidi, gridSlice, importFile, importMidi, onSaveState, resamplePad, savePadToLibrary, saveSampleToLibrary, saveState } from './actions';
+import { Library } from './Library';
 import { PianoRoll } from './PianoRoll';
 import { padHue } from './colors';
 import { inArtifact } from '../ai/viewer';
@@ -55,6 +56,7 @@ function Studio() {
   const [panel, setPanel] = useState<'steps' | 'pad' | 'fx'>('steps');
   const [msg, setMsg] = useState<string | null>(null);
   const [chat, setChat] = useState(false);
+  const [sheet, setSheet] = useState<'library' | 'guide' | null>(null);
   const [view, setView] = useState<'chop' | 'roll'>('chop');
   const [noteLen, setNoteLen] = useState(STEP_TICKS * 2);
   useEffect(() => { setMidiMode(view === 'roll' ? 'keys' : 'pads'); }, [view]);
@@ -72,7 +74,8 @@ function Studio() {
   return (
     <div className={chat ? 'studio with-chat' : 'studio'}>
       {chat && <Chat onClose={() => setChat(false)} />}
-      <Transport p={p} say={setMsg} chat={chat} toggleChat={() => setChat(!chat)} />
+      {sheet === 'library' && <Library onClose={() => setSheet(null)} say={setMsg} />}
+      <Transport p={p} say={setMsg} chat={chat} toggleChat={() => setChat(!chat)} openSheet={setSheet} />
       {msg && <div className="toast" role="status" onClick={() => setMsg(null)}>{msg}</div>}
       <section className="chop">
         {view === 'chop' ? (
@@ -97,14 +100,14 @@ function Studio() {
             <button role="tab" aria-selected={panel === 'pad'} className={panel === 'pad' ? 'tab on' : 'tab'} onClick={() => setPanel('pad')}>Pad {padLabel(p.selectedPad)}</button>
             <button id="tab-fx" role="tab" aria-selected={panel === 'fx'} className={panel === 'fx' ? 'tab on' : 'tab'} onClick={() => setPanel('fx')}>FX{fxActive(p.pads[p.selectedPad].fx) ? ' •' : ''}</button>
           </div>
-          {panel === 'steps' ? <Steps p={p} /> : panel === 'pad' ? <PadEdit p={p} /> : <FxEdit p={p} say={setMsg} />}
+          {panel === 'steps' ? <Steps p={p} /> : panel === 'pad' ? <PadEdit p={p} say={setMsg} /> : <FxEdit p={p} say={setMsg} />}
         </div>
       </section>
     </div>
   );
 }
 
-function Transport({ p, say, chat, toggleChat }: { p: Project; say: (m: string | null) => void; chat: boolean; toggleChat: () => void }) {
+function Transport({ p, say, chat, toggleChat, openSheet }: { p: Project; say: (m: string | null) => void; chat: boolean; toggleChat: () => void; openSheet: (s: 'library' | 'guide') => void }) {
   const pos = useTick(() => Math.floor(engine.position() / (PPQ / 4)));
   const taps = useRef<number[]>([]);
   const [busy, setBusy] = useState(false);
@@ -150,6 +153,7 @@ function Transport({ p, say, chat, toggleChat }: { p: Project; say: (m: string |
         <button id="export" className="btn primary" disabled={busy}
           onClick={async () => { setBusy(true); try { say(await exportLoopWav()); } catch { say('Export failed. Try again.'); } setBusy(false); }}>
           {busy ? 'Rendering…' : inArtifact() ? 'Export loop' : 'Export WAV'}</button>
+        <button id="library" className="btn" onClick={() => openSheet('library')}>Library</button>
         <button id="assistant" className={chat ? 'btn on' : 'btn'} aria-pressed={chat} onClick={toggleChat}>Assistant</button>
         <span className="meta" title="Output delay reported by the browser">
           {lat !== null ? `${lat} ms` : ''}{saveState === 'off' ? ' · not saving' : saveState === 'saving' ? ' · saving' : ' · saved'}
@@ -184,6 +188,7 @@ function ChopBar({ p, tool, setTool, say, switcher }: { p: Project; tool: Tool; 
         )}
         {s?.bpm && <button className="btn" title="Set the project tempo to this sample's detected tempo"
           onClick={() => dispatch('project.setBpm', { bpm: s.bpm })}>Use {s.bpm} BPM</button>}
+        {s && <button id="save-sample" className="btn" onClick={async () => say(await saveSampleToLibrary(s.id))}>Save to library</button>}
       </div>
       {s && (
         <>
@@ -295,7 +300,7 @@ function Steps({ p }: { p: Project }) {
   );
 }
 
-function PadEdit({ p }: { p: Project }) {
+function PadEdit({ p, say }: { p: Project; say: (m: string | null) => void }) {
   const i = p.selectedPad, pad = p.pads[i];
   const s = p.samples.find((x) => x.id === pad.sampleId);
   if (!s) return <div className="panel"><p className="panel-title">Pad {padLabel(i)} is empty</p><p className="hint">Slice a sample and press Send to pads.</p></div>;
@@ -315,6 +320,7 @@ function PadEdit({ p }: { p: Project }) {
           onClick={() => dispatch('pad.assign', { pad: i, sampleId: s.id, start: b[slice - 1], end: b[slice] })}>◀ Slice</button>
         <button className="btn" disabled={slice < 0 || slice >= b.length - 2}
           onClick={() => dispatch('pad.assign', { pad: i, sampleId: s.id, start: b[slice + 1], end: b[slice + 2] })}>Slice ▶</button>
+        <button id="save-pad" className="btn" onClick={async () => say(await savePadToLibrary(i))}>Save to library</button>
         <button className="btn danger" onClick={() => dispatch('pad.clear', { pad: i })}>Clear pad</button>
       </div>
       <p className="hint">Pitch changes speed too, like a classic sampler.</p>

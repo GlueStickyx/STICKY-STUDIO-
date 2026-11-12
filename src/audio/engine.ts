@@ -425,6 +425,17 @@ export class Engine {
     this.auditionVoice = playPadVoice(this.mixer, -1, buf, null, plain, now, 1);
   }
 
+  /** Play a whole buffer once through the studio output (library preview). Returns a function that stops it. */
+  playBuffer(buf: AudioBuffer, onEnd: () => void): () => void {
+    if (!this.ctx) { onEnd(); return () => {}; }
+    const node = this.ctx.createBufferSource();
+    node.buffer = buf;
+    node.connect(this.master);
+    node.onended = onEnd;
+    node.start();
+    return () => { try { node.stop(); } catch { /* already ended */ } };
+  }
+
   private offline(seconds: number, sampleRate: number) {
     const off = new OfflineAudioContext(2, Math.max(1, Math.round(seconds * sampleRate)), sampleRate);
     const master = off.createGain();

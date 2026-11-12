@@ -175,6 +175,67 @@ try {
   check('auto-slice finds slices', parseInt(meta) >= 6, meta);
   await page.click('#topads');
 
+  // Library: sounds and projects kept outside the project.
+  await page.click('#library');
+  await page.waitForSelector('.lib-empty');
+  check('library starts empty with an explanation', (await page.locator('.lib-empty').innerText()).includes('Nothing saved yet'));
+  await page.click('#lib-save-loop');
+  await page.waitForSelector('.lib-row');
+  check('the current loop saves as a sound', (await page.locator('.lib-name').first().innerText()).startsWith('Loop 2 bar') && (await page.locator('.lib-row .meta').first().innerText()).includes('4.8 s'));
+  await page.click('#lib-close');
+  await page.click('#save-sample');
+  await page.waitForSelector('.toast:has-text("saved to the library")');
+  await page.click('.tab:has-text("Pad")');
+  await page.click('#save-pad');
+  await page.waitForSelector('.toast:has-text("saved to the library as")');
+  await page.click('.tab:has-text("Steps")');
+  await page.click('#library');
+  await page.waitForSelector('.lib-row'); // the list loads from storage after the sheet opens
+  check('sample and pad saves appear in the library', await page.locator('.lib-row').count() === 3);
+  await page.fill('#lib-search', 'one-shot');
+  check('search filters by tag', await page.locator('.lib-row').count() === 1);
+  await page.fill('#lib-search', '');
+  await page.click('.lib-row >> nth=0 >> text=Rename / tag');
+  await page.fill('.lib-edit input[name="name"]', 'My kick');
+  await page.fill('.lib-edit input[name="tags"]', 'Kick, favourite');
+  await page.click('.lib-edit >> text=Save');
+  await page.waitForSelector('.lib-name:has-text("My kick")');
+  check('rename and tags are kept', (await page.locator('.lib-row:has-text("My kick") .meta').innerText()).includes('kick, favourite'));
+  // Put a library sound on an empty pad in bank D.
+  await page.click('#lib-close');
+  await page.click('#bank-3');
+  await page.dispatchEvent('#pad-5', 'pointerdown');
+  await page.click('#library');
+  await page.click('.lib-row:has-text("My kick") >> text=To pad D6');
+  await page.waitForSelector('.toast:has-text("is on pad D6")');
+  await page.click('#lib-close');
+  check('a library sound lands on the chosen pad', await page.locator('#pad-5.loaded').count() === 1);
+  await page.click('#undo');
+  check('one undo takes it off again', await page.locator('#pad-5.loaded').count() === 0);
+  await page.click('#bank-0');
+  await page.dispatchEvent('#pad-0', 'pointerdown');
+  // Projects: save, change, reopen.
+  await page.click('#library');
+  await page.click('#lib-tab-projects');
+  await page.fill('#proj-name', 'First beat');
+  await page.click('#proj-save');
+  await page.waitForSelector('.lib-row:has-text("First beat")');
+  await page.click('#lib-close');
+  await page.fill('#bpm', '140');
+  await page.click('#library');
+  await page.click('#lib-tab-projects');
+  await page.click('.lib-row:has-text("First beat") >> text=Open');
+  await page.click('.lib-row:has-text("First beat") >> text=Tap again to replace the screen');
+  await page.waitForSelector('.toast:has-text("Opened")');
+  check('opening a saved project restores it', (await page.inputValue('#bpm')) === '100' && await page.locator('.pad.loaded').count() === 16 && await page.locator('.sheet').count() === 0);
+  await page.click('#library');
+  await page.click('.lib-row:has-text("Loop 2 bar") >> text=Delete');
+  await page.click('.lib-row:has-text("Loop 2 bar") >> text=Tap again to delete');
+  await page.waitForFunction(() => document.querySelectorAll('.lib-row').length === 2);
+  check('delete needs two taps and removes the sound', true);
+  if (shots) await page.screenshot({ path: `${shots}/library.png` });
+  await page.click('#lib-close');
+
   // Pad banks: a later bank is empty until slices are sent to it, and both banks play in the export.
   check('20 slices spilled four pads into bank B', await (async () => { await page.click('#bank-1'); return (await page.locator('.pad.loaded').count()) === 4; })());
   await page.click('#bank-2');
@@ -267,6 +328,10 @@ try {
   await page.click('#start');
   await page.waitForSelector('.pads');
   check('project survives a reload', await page.locator('#sample option:has-text("my-test-tone")').count() === 1);
+  await page.click('#library');
+  await page.waitForSelector('.lib-row');
+  check('the library survives a reload', await page.locator('.lib-row').count() === 2 && await page.locator('.lib-name:has-text("My kick")').count() === 1);
+  await page.click('#lib-close');
 
   await page.setViewportSize({ width: 800, height: 1280 });
   await page.waitForTimeout(200);
