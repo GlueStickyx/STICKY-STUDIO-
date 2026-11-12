@@ -3,6 +3,36 @@
 A browser sampler/groovebox, tablet-first (Android Chrome), growing one finished slice at a time
 toward a full studio. A desktop build with real VST hosting is the long-term goal.
 
+## Who this is for and what it is (owner's words, Nov 2026 — read this first)
+
+The owner is **not a trained producer** and does not know how most DAW features work. They are short on
+credits, so do not make them re-explain this, and do not spend turns on status chatter.
+
+The goal is a **guided co-pilot studio**, not a pile of tools:
+- Suno's output is generic. The owner wants to take songs they have downloaded, cut and reshape them into
+  **new samples and loops, and feed those back into Suno** (and keep a library of them).
+- They ask in plain words — "make a tech house drum line from my drum samples", "I need a MIDI part for a
+  tech house track", "add the next part" — and the assistant **does it, step by step, and shows what it
+  just did and why**, so the owner learns (tempo, key, chords, pattern, sound choices).
+- **Point and ask:** a mode where the owner taps a pad, control or section and sends the assistant a
+  question or instruction about that thing.
+- The assistant should be able to **research an artist's production style** and turn it into steps/recipes.
+- They want **a new way of making samples that is not already out there** (idea on the table: assistant-written
+  "recipes" that run a chain of stretch/scatter/resample/chop steps to breed batches of new sounds from one source).
+- **Vocal samples** matter as much as drums.
+- **Other AI providers** (Google Gemini, GPT, local) must be pluggable with clear setup instructions, because
+  Claude credits run out; plus Suno through MCP, with a Suno workstation like the two reference screenshots
+  (7-pillar style/lyric builder, generate queue, library).
+- **VST/plugins** for extra sounds: impossible in a browser; needs the desktop build. Until then, built-in
+  instruments/effects. Set the UI up so slots exist for things that arrive later.
+- Look: skeuomorphic dark DAW with a tab per module and a library sidebar (see the owner's reference build
+  spec: Analyze, Sampler, Chop, Drums, Melody, Clips, Mutate, Arrange). Missing so far: Clips, Arrange,
+  mixer, that layout/skin.
+
+Next build agreed in principle: **co-pilot mode** (guided "build a track" sessions with visible, explained
+steps; point-and-ask; a built-in starter drum/synth kit so the assistant can make a part from nothing).
+Then: provider settings (Gemini/GPT), workstation shell + Clips + Arrange, Suno workstation, recipes.
+
 ## Rules (do not change without asking the owner)
 
 1. Every user action is a named command in `src/core/bus.ts`. The UI never mutates the project
