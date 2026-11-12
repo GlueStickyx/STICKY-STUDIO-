@@ -175,6 +175,13 @@ try {
   check('auto-slice finds slices', parseInt(meta) >= 6, meta);
   await page.click('#topads');
 
+  // Module tabs: tools not built yet say so plainly and lead back to the Sampler.
+  check('a tab exists for every tool', await page.locator('.modules .mod').count() === 9 && await page.locator('.mod .soon').count() === 8);
+  await page.click('#mod-arrange');
+  check('an unbuilt tool says it is not built and what works today', /not built yet/i.test(await page.locator('.planned-card').innerText()) && /what you can do today/i.test(await page.locator('.planned-card').innerText()) && await page.locator('.pads').count() === 0);
+  await page.click('text=Back to the Sampler');
+  check('back returns to the working studio', await page.locator('.pad.loaded').count() === 16);
+
   // Guide: every page opens, every picture loads, and every marker has its explanation.
   await page.click('#guide');
   check('guide opens on the workflows', await page.locator('.flow').count() >= 6);

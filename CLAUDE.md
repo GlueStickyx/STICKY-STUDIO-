@@ -8,7 +8,8 @@ toward a full studio. A desktop build with real VST hosting is the long-term goa
 The owner is **not a trained producer** and does not know how most DAW features work. They are short on
 credits, so do not make them re-explain this, and do not spend turns on status chatter.
 
-The goal is a **guided co-pilot studio**, not a pile of tools:
+The goal is **both**: the complete set of DAW tools (the owner was emphatic: they still want every tool), **and**
+a guided co-pilot on top that helps them use those tools. Never frame it as one instead of the other:
 - Suno's output is generic. The owner wants to take songs they have downloaded, cut and reshape them into
   **new samples and loops, and feed those back into Suno** (and keep a library of them).
 - They ask in plain words — "make a tech house drum line from my drum samples", "I need a MIDI part for a
@@ -29,7 +30,7 @@ The goal is a **guided co-pilot studio**, not a pile of tools:
   spec: Analyze, Sampler, Chop, Drums, Melody, Clips, Mutate, Arrange). Missing so far: Clips, Arrange,
   mixer, that layout/skin.
 
-Next build agreed in principle: **co-pilot mode** (guided "build a track" sessions with visible, explained
+Wanted soon: **co-pilot mode** (guided "build a track" sessions with visible, explained
 steps; point-and-ask; a built-in starter drum/synth kit so the assistant can make a part from nothing).
 Then: provider settings (Gemini/GPT), workstation shell + Clips + Arrange, Suno workstation, recipes.
 
@@ -42,6 +43,9 @@ Then: provider settings (Gemini/GPT), workstation shell + Clips + Arrange, Suno 
    No Tone.js, no WebAssembly, no cross-origin isolation headers.
 3. The project (`src/core/types.ts`) is plain serialisable data and autosaves on every change.
 4. No control appears on screen unless it does something audible or visible. No placeholders.
+   One owner-requested exception: `src/ui/modules.ts` lists tools not built yet; each has a tab marked
+   "soon" and an honest page (what it will do, build-order number, what works today). No fake controls on those pages.
+   When a module is built, set `built: true` and replace its page.
 5. Touch first: controls at least 44px, pads large, `touch-action` set on anything dragged.
 6. Every audio feature has a test: pure logic in `tests/*.test.ts` (vitest), behaviour in a real
    browser in `tests/e2e.mjs` (renders audio and checks the samples).
@@ -75,6 +79,10 @@ Guide (`src/ui/Guide.tsx`): text in `src/guide/guide.json`, pictures and marker 
 the running app. **After changing any screen, run `npm run guide` and rebuild, and update guide.json
 when a control is added, renamed or removed** — the script warns about markers with nothing on screen.
 
-Next, one slice at a time: Suno studio tab → stems → clip launcher and arrangement →
-knowledge library and local-model/MCP connections for the assistant → workflow canvas → mic sampling (owner deferred it; web build only, artifact pages have no microphone) →
-desktop shell with plugin hosting.
+Workstation shell: module tabs (`src/ui/modules.ts`) and the skeuomorphic skin (end of `styles.css`).
+
+Next, in the order shown on the module tabs: Clips → Arrange → Mixer → Analyze (auto cuts incl. vocals) →
+Stems → Suno workstation → AI setup (Gemini/GPT/local keys, knowledge shelf, research mode) → Plugins (desktop).
+Alongside: co-pilot mode (explained steps, point-and-ask, starter kit), sample "recipes", sampler extras
+(attack/decay, choke groups, velocity, 8/16-bar loops, 32 steps, probability, pattern chains, chords,
+arpeggiator), library sidebar, Suno URL field, downloadable project file, mic sampling (web build only).

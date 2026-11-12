@@ -24,6 +24,7 @@ const size = (w, h) => page.setViewportSize({ width: w, height: h });
 // How to get each area into a state worth photographing. `maxH` crops tall full-screen sheets.
 const setups = {
   transport: async () => {},
+  modules: async () => {},
   chop: async () => {},
   pads: async () => {},
   steps: async () => { await hit(0); await page.click('.tab:has-text("Steps")'); },

@@ -1,167 +1,656 @@
 {
   "sections": [
     {
-      "id": "transport", "title": "Top bar", "clip": ".transport",
+      "id": "transport",
+      "title": "Top bar",
+      "clip": ".transport",
       "intro": "The strip across the top is always visible. It starts and stops the loop, sets the tempo, and opens the Library, the Assistant and this Guide.",
       "marks": [
-        { "sel": "#play", "name": "Play / Stop", "text": "Starts the loop from the beginning, or stops it. On a PC keyboard, Space does the same." },
-        { "sel": "#rec", "name": "Record", "text": "Starts the loop if it is stopped, then writes every pad you hit into the loop. Press it again to stop recording while the loop keeps playing. One Undo removes the whole take." },
-        { "sel": "#metro", "name": "Click", "text": "Turns the metronome on or off. It is never included in an export." },
-        { "sel": ".pos", "name": "Position", "text": "Shows the bar and beat while the loop plays." },
-        { "sel": "#bpm", "name": "Tempo", "text": "Type a tempo from 40 to 240 BPM, or nudge it with the − and + buttons on either side. Tempo can change while the loop plays." },
-        { "sel": ".transport button:has-text(\"Tap\")", "name": "Tap", "text": "Tap along to a beat three or more times to set the tempo by feel." },
-        { "sel": "#bars", "name": "Loop length", "text": "The loop is 1, 2 or 4 bars long. Step patterns repeat every bar; recorded hits and piano-roll notes can sit anywhere in the loop. Shortening the loop removes what no longer fits." },
-        { "sel": "#quantize", "name": "Snap", "text": "While recording, each hit is pulled to the nearest 1/8, 1/16 or 1/32 note. Off keeps your exact timing." },
-        { "sel": "#undo", "name": "Undo / Redo", "text": "Step back through anything that changed the project: cuts, pad sends, patterns, effects, takes, and everything the Assistant did in one reply." },
-        { "sel": "#export", "name": "Export", "text": "Renders one pass of the loop to an audio file. Echo and reverb tails that run past the end are wrapped to the start, so the file loops cleanly. Inside the Claude page the WAV arrives in a zip." },
-        { "sel": "#library", "name": "Library", "text": "Opens your saved sounds and saved projects." },
-        { "sel": "#assistant", "name": "Assistant", "text": "Opens the chat panel. The Assistant can read your pads and change the studio for you." },
-        { "sel": "#guide", "name": "Guide", "text": "Opens these instructions." },
-        { "sel": ".transport .group.end .meta", "name": "Status", "text": "The number is the sound delay your device reports, in milliseconds; lower feels tighter. Next to it: saved, saving, or not saving if the browser is blocking storage." }
+        {
+          "sel": "#play",
+          "name": "Play / Stop",
+          "text": "Starts the loop from the beginning, or stops it. On a PC keyboard, Space does the same."
+        },
+        {
+          "sel": "#rec",
+          "name": "Record",
+          "text": "Starts the loop if it is stopped, then writes every pad you hit into the loop. Press it again to stop recording while the loop keeps playing. One Undo removes the whole take."
+        },
+        {
+          "sel": "#metro",
+          "name": "Click",
+          "text": "Turns the metronome on or off. It is never included in an export."
+        },
+        {
+          "sel": ".pos",
+          "name": "Position",
+          "text": "Shows the bar and beat while the loop plays."
+        },
+        {
+          "sel": "#bpm",
+          "name": "Tempo",
+          "text": "Type a tempo from 40 to 240 BPM, or nudge it with the − and + buttons on either side. Tempo can change while the loop plays."
+        },
+        {
+          "sel": ".transport button:has-text(\"Tap\")",
+          "name": "Tap",
+          "text": "Tap along to a beat three or more times to set the tempo by feel."
+        },
+        {
+          "sel": "#bars",
+          "name": "Loop length",
+          "text": "The loop is 1, 2 or 4 bars long. Step patterns repeat every bar; recorded hits and piano-roll notes can sit anywhere in the loop. Shortening the loop removes what no longer fits."
+        },
+        {
+          "sel": "#quantize",
+          "name": "Snap",
+          "text": "While recording, each hit is pulled to the nearest 1/8, 1/16 or 1/32 note. Off keeps your exact timing."
+        },
+        {
+          "sel": "#undo",
+          "name": "Undo / Redo",
+          "text": "Step back through anything that changed the project: cuts, pad sends, patterns, effects, takes, and everything the Assistant did in one reply."
+        },
+        {
+          "sel": "#export",
+          "name": "Export",
+          "text": "Renders one pass of the loop to an audio file. Echo and reverb tails that run past the end are wrapped to the start, so the file loops cleanly. Inside the Claude page the WAV arrives in a zip."
+        },
+        {
+          "sel": "#library",
+          "name": "Library",
+          "text": "Opens your saved sounds and saved projects."
+        },
+        {
+          "sel": "#assistant",
+          "name": "Assistant",
+          "text": "Opens the chat panel. The Assistant can read your pads and change the studio for you."
+        },
+        {
+          "sel": "#guide",
+          "name": "Guide",
+          "text": "Opens these instructions."
+        },
+        {
+          "sel": ".transport .group.end .meta",
+          "name": "Status",
+          "text": "The number is the sound delay your device reports, in milliseconds; lower feels tighter. Next to it: saved, saving, or not saving if the browser is blocking storage."
+        }
       ]
     },
     {
-      "id": "chop", "title": "Chop view", "clip": ".chop",
+      "id": "modules",
+      "title": "Module tabs",
+      "clip": ".modules",
+      "intro": "One tab for every tool in the workstation. The Sampler is where everything built so far lives. Tabs marked soon are tools that are planned but not built yet; each opens a page saying what it will do, where it is in the build order, and what you can do today instead.",
+      "marks": [
+        {
+          "sel": "#mod-studio",
+          "name": "Sampler",
+          "text": "The working studio: chop view, piano roll, pads, steps and effects."
+        },
+        {
+          "sel": "#mod-clips",
+          "name": "Clips",
+          "text": "Planned: save loops as clips and launch them live, in time."
+        },
+        {
+          "sel": "#mod-arrange",
+          "name": "Arrange",
+          "text": "Planned: lay clips along a timeline to build a full song."
+        },
+        {
+          "sel": "#mod-mixer",
+          "name": "Mixer",
+          "text": "Planned: a channel strip per track with volume, pan, EQ and meters."
+        },
+        {
+          "sel": "#mod-analyze",
+          "name": "Analyze",
+          "text": "Planned: suggested cuts across a whole song, including vocal lines."
+        },
+        {
+          "sel": "#mod-stems",
+          "name": "Stems",
+          "text": "Planned: split a song into vocals, drums, bass and the rest."
+        },
+        {
+          "sel": "#mod-suno",
+          "name": "Suno",
+          "text": "Planned: style and lyric builder, generate, and your Suno library, inside the studio."
+        },
+        {
+          "sel": "#mod-ai",
+          "name": "AI setup",
+          "text": "Planned: run the Assistant on Google Gemini, GPT or your own PC, and give it your documents."
+        },
+        {
+          "sel": "#mod-plugins",
+          "name": "Plugins",
+          "text": "Planned for the desktop version: VST and CLAP plugins."
+        }
+      ]
+    },
+    {
+      "id": "chop",
+      "title": "Chop view",
+      "clip": ".chop",
       "intro": "This is where a track becomes playable pieces. Bring audio in, cut it into slices, and send the slices to the pads.",
       "marks": [
-        { "sel": "#view-chop", "name": "Chop / Piano roll", "text": "Switches the top area between cutting up audio and writing notes for the selected pad." },
-        { "sel": "#import", "name": "Import audio", "text": "Choose a WAV or MP3 from your device. It is added to the project and shown here." },
-        { "sel": "#sample", "name": "Sample menu", "text": "Every sample in the project. Pick which one the chop view shows." },
-        { "sel": ".chopbar button:has-text(\"Use\")", "name": "Use detected tempo", "text": "Appears when a tempo was detected in the sample. Tap to set the project to it. Very fast or slow tracks can read as half or double; type the right number if so." },
-        { "sel": "#save-sample", "name": "Save to library", "text": "Keeps the whole sample in your Library so other projects can use it." },
-        { "sel": "[aria-label=\"Waveform tool\"]", "name": "Waveform tool", "text": "Audition: tap a slice to hear it. Add cut: tap the waveform to place a cut. Remove cut: tap a cut to delete it. In any tool you can drag a yellow cut marker to move it." },
-        { "sel": "#autoslice", "name": "Auto-slice", "text": "Places cuts at the hits it finds in the audio. The slider next to it sets how sensitive it is: move right for more slices." },
-        { "sel": ".chopbar button:has-text(\"÷8\")", "name": "Equal cuts", "text": "÷8 and ÷16 cut the sample into equal parts. Best for a loop that is exactly a number of bars long." },
-        { "sel": ".chopbar button:has-text(\"Clear cuts\")", "name": "Clear cuts", "text": "Removes every cut so the sample is one slice again." },
-        { "sel": "#topads", "name": "Send to pads", "text": "Puts the slices on the pads, starting at pad 1 of the bank on screen and running into the next banks if there are more than 16. The count beside it tells you how many slices there are." },
-        { "sel": ".wave-canvas canvas", "name": "Waveform", "text": "Each slice is tinted with the colour of the pad it will land on and labelled with that pad's name. Yellow lines are the cuts." },
-        { "sel": ".wave-zoom", "name": "Zoom", "text": "+ zooms in for precise cuts on long tracks; − zooms out. When zoomed in, a slider appears under the waveform to scroll." }
+        {
+          "sel": "#view-chop",
+          "name": "Chop / Piano roll",
+          "text": "Switches the top area between cutting up audio and writing notes for the selected pad."
+        },
+        {
+          "sel": "#import",
+          "name": "Import audio",
+          "text": "Choose a WAV or MP3 from your device. It is added to the project and shown here."
+        },
+        {
+          "sel": "#sample",
+          "name": "Sample menu",
+          "text": "Every sample in the project. Pick which one the chop view shows."
+        },
+        {
+          "sel": ".chopbar button:has-text(\"Use\")",
+          "name": "Use detected tempo",
+          "text": "Appears when a tempo was detected in the sample. Tap to set the project to it. Very fast or slow tracks can read as half or double; type the right number if so."
+        },
+        {
+          "sel": "#save-sample",
+          "name": "Save to library",
+          "text": "Keeps the whole sample in your Library so other projects can use it."
+        },
+        {
+          "sel": "[aria-label=\"Waveform tool\"]",
+          "name": "Waveform tool",
+          "text": "Audition: tap a slice to hear it. Add cut: tap the waveform to place a cut. Remove cut: tap a cut to delete it. In any tool you can drag a yellow cut marker to move it."
+        },
+        {
+          "sel": "#autoslice",
+          "name": "Auto-slice",
+          "text": "Places cuts at the hits it finds in the audio. The slider next to it sets how sensitive it is: move right for more slices."
+        },
+        {
+          "sel": ".chopbar button:has-text(\"÷8\")",
+          "name": "Equal cuts",
+          "text": "÷8 and ÷16 cut the sample into equal parts. Best for a loop that is exactly a number of bars long."
+        },
+        {
+          "sel": ".chopbar button:has-text(\"Clear cuts\")",
+          "name": "Clear cuts",
+          "text": "Removes every cut so the sample is one slice again."
+        },
+        {
+          "sel": "#topads",
+          "name": "Send to pads",
+          "text": "Puts the slices on the pads, starting at pad 1 of the bank on screen and running into the next banks if there are more than 16. The count beside it tells you how many slices there are."
+        },
+        {
+          "sel": ".wave-canvas canvas",
+          "name": "Waveform",
+          "text": "Each slice is tinted with the colour of the pad it will land on and labelled with that pad's name. Yellow lines are the cuts."
+        },
+        {
+          "sel": ".wave-zoom",
+          "name": "Zoom",
+          "text": "+ zooms in for precise cuts on long tracks; − zooms out. When zoomed in, a slider appears under the waveform to scroll."
+        }
       ]
     },
     {
-      "id": "pads", "title": "Pads and banks", "clip": ".padwrap",
+      "id": "pads",
+      "title": "Pads and banks",
+      "clip": ".padwrap",
       "intro": "Sixteen pads on screen, four banks deep: 64 pads in all. Pad 1 is bottom-left, like a hardware sampler.",
       "marks": [
-        { "sel": "#bank-0", "name": "Banks A to D", "text": "Switch which 16 pads are on screen. A dot marks a bank that has sounds on it. All banks keep playing in the loop, whichever one you are looking at." },
-        { "sel": "#pad-12", "name": "A pad", "text": "Tap to play it and select it. A coloured pad has a sound; a grey pad is empty. Pads glow when they play, including when the loop plays them." },
-        { "sel": ".pad.sel", "name": "Selected pad", "text": "The white outline shows which pad the Steps, Pad and FX tabs and the piano roll are working on." }
+        {
+          "sel": "#bank-0",
+          "name": "Banks A to D",
+          "text": "Switch which 16 pads are on screen. A dot marks a bank that has sounds on it. All banks keep playing in the loop, whichever one you are looking at."
+        },
+        {
+          "sel": "#pad-12",
+          "name": "A pad",
+          "text": "Tap to play it and select it. A coloured pad has a sound; a grey pad is empty. Pads glow when they play, including when the loop plays them."
+        },
+        {
+          "sel": ".pad.sel",
+          "name": "Selected pad",
+          "text": "The white outline shows which pad the Steps, Pad and FX tabs and the piano roll are working on."
+        }
       ],
-      "notes": ["On a PC keyboard the pads are on Z X C V (bottom row), A S D F, Q W E R and 1 2 3 4 (top row). The keys play the bank on screen and are switched off while you type in a text box."]
+      "notes": [
+        "On a PC keyboard the pads are on Z X C V (bottom row), A S D F, Q W E R and 1 2 3 4 (top row). The keys play the bank on screen and are switched off while you type in a text box."
+      ]
     },
     {
-      "id": "steps", "title": "Steps tab", "clip": ".side",
+      "id": "steps",
+      "title": "Steps tab",
+      "clip": ".side",
       "intro": "A step sequencer for the selected pad. The 16 steps are the 16th notes of one bar, and the pattern repeats every bar of the loop.",
       "marks": [
-        { "sel": ".side .tabs", "name": "Tabs", "text": "Steps, Pad and FX all act on the selected pad. A dot after FX means that pad has effects switched on." },
-        { "sel": "#step-0", "name": "A step", "text": "Tap once for a full hit, again for a soft hit, again for off. Steps 1, 5, 9 and 13 have a brighter edge: those are the beats. A white ring moves across while the loop plays." },
-        { "sel": "#swing", "name": "Swing", "text": "Delays every second 16th note for a looser feel. It applies to the whole project. Around 16 to 25% is a classic swing." },
-        { "sel": ".side button:has-text(\"Clear steps\")", "name": "Clear steps", "text": "Empties this pad's step pattern." },
-        { "sel": ".side button:has-text(\"recorded hit\")", "name": "Erase recorded hits", "text": "Removes the hits you recorded live on this pad, leaving its steps alone." },
-        { "sel": ".side button:has-text(\"Erase all recorded\")", "name": "Erase all recorded", "text": "Removes live-recorded hits on every pad." }
+        {
+          "sel": ".side .tabs",
+          "name": "Tabs",
+          "text": "Steps, Pad and FX all act on the selected pad. A dot after FX means that pad has effects switched on."
+        },
+        {
+          "sel": "#step-0",
+          "name": "A step",
+          "text": "Tap once for a full hit, again for a soft hit, again for off. Steps 1, 5, 9 and 13 have a brighter edge: those are the beats. A white ring moves across while the loop plays."
+        },
+        {
+          "sel": "#swing",
+          "name": "Swing",
+          "text": "Delays every second 16th note for a looser feel. It applies to the whole project. Around 16 to 25% is a classic swing."
+        },
+        {
+          "sel": ".side button:has-text(\"Clear steps\")",
+          "name": "Clear steps",
+          "text": "Empties this pad's step pattern."
+        },
+        {
+          "sel": ".side button:has-text(\"recorded hit\")",
+          "name": "Erase recorded hits",
+          "text": "Removes the hits you recorded live on this pad, leaving its steps alone."
+        },
+        {
+          "sel": ".side button:has-text(\"Erase all recorded\")",
+          "name": "Erase all recorded",
+          "text": "Removes live-recorded hits on every pad."
+        }
       ]
     },
     {
-      "id": "pad", "title": "Pad tab", "clip": ".side",
+      "id": "pad",
+      "title": "Pad tab",
+      "clip": ".side",
       "intro": "The basic settings of the selected pad.",
       "marks": [
-        { "sel": "#pad-gain", "name": "Volume", "text": "0 to 150%." },
-        { "sel": "#pad-pitch", "name": "Pitch", "text": "Up or down 12 semitones. Like a classic sampler, lower is also slower and higher is faster. To change length without pitch, use Stretch in the FX tab." },
-        { "sel": "#pad-reverse", "name": "Reverse", "text": "Plays the slice backwards." },
-        { "sel": ".side button:has-text(\"Slice ▶\")", "name": "◀ Slice / Slice ▶", "text": "Moves the pad to the previous or next slice of the same sample, for when a pad landed one slice off." },
-        { "sel": "#save-pad", "name": "Save to library", "text": "Saves this pad exactly as it sounds, with its pitch and effects, as a one-shot in your Library." },
-        { "sel": ".side button:has-text(\"Clear pad\")", "name": "Clear pad", "text": "Empties the pad, along with its steps, recorded hits and notes." }
+        {
+          "sel": "#pad-gain",
+          "name": "Volume",
+          "text": "0 to 150%."
+        },
+        {
+          "sel": "#pad-pitch",
+          "name": "Pitch",
+          "text": "Up or down 12 semitones. Like a classic sampler, lower is also slower and higher is faster. To change length without pitch, use Stretch in the FX tab."
+        },
+        {
+          "sel": "#pad-reverse",
+          "name": "Reverse",
+          "text": "Plays the slice backwards."
+        },
+        {
+          "sel": ".side button:has-text(\"Slice ▶\")",
+          "name": "◀ Slice / Slice ▶",
+          "text": "Moves the pad to the previous or next slice of the same sample, for when a pad landed one slice off."
+        },
+        {
+          "sel": "#save-pad",
+          "name": "Save to library",
+          "text": "Saves this pad exactly as it sounds, with its pitch and effects, as a one-shot in your Library."
+        },
+        {
+          "sel": ".side button:has-text(\"Clear pad\")",
+          "name": "Clear pad",
+          "text": "Empties the pad, along with its steps, recorded hits and notes."
+        }
       ]
     },
     {
-      "id": "fx", "title": "FX tab", "clip": ".side",
+      "id": "fx",
+      "title": "FX tab",
+      "clip": ".side",
       "intro": "Effects for the selected pad only. Every pad has its own. What you hear is exactly what is exported.",
       "marks": [
-        { "sel": "[aria-label=\"Filter type\"]", "name": "Filter", "text": "Low-pass removes highs (darker). High-pass removes lows (thinner). Band-pass keeps a band in the middle (telephone-like)." },
-        { "sel": "#fx-cutoff", "name": "Cutoff and Resonance", "text": "Cutoff is where the filter acts. Resonance adds a ringing peak at that point. Both appear when a filter is on." },
-        { "sel": "#fx-drive", "name": "Drive", "text": "Saturation. Low settings add warmth, the middle gets crunchy, the top is destroyed." },
-        { "sel": "#fx-delay", "name": "Echo", "text": "How loud the echoes are. The original sound stays at full level." },
-        { "sel": "[aria-label=\"Echo time\"]", "name": "Echo time and Repeats", "text": "Time is locked to the tempo: 1/16, 1/8, dotted 1/8 or 1/4 note. Repeats sets how long the echoes carry on." },
-        { "sel": "#fx-reverb", "name": "Reverb", "text": "How much of the pad goes into a space. 15 to 40% is normal; 100% is a wash." },
-        { "sel": "[aria-label=\"Reverb size\"]", "name": "Space", "text": "Room is short and tight, Hall is about two seconds, Vast is five." },
-        { "sel": "[aria-label=\"Stretch: length without changing pitch\"]", "name": "Stretch", "text": "Makes the slice longer or shorter without changing its pitch." },
-        { "sel": "[aria-label=\"Stretch the slice to a musical length\"]", "name": "Fit to", "text": "Stretches the slice to exactly a quarter note, half note, one bar or two bars at the current tempo. A button is greyed out when the slice would have to stretch more than four times or shrink below a quarter." },
-        { "sel": "#fx-scatter", "name": "Scatter and Grain size", "text": "Scatter makes tiny pieces of the slice jump around, turning a hit or a voice into a texture. Grain size sets how long those pieces are: shorter is cleaner on drums, longer is smoother on held sounds." },
-        { "sel": "[aria-label=\"Stutter\"]", "name": "Stutter", "text": "Repeats the first part of the slice ×2 to ×8 in the time the whole slice would take." },
-        { "sel": "#fx-hear", "name": "Hear it", "text": "Plays the pad without leaving the panel." },
-        { "sel": "#fx-reset", "name": "Remove effects", "text": "Switches every effect on this pad off." },
-        { "sel": "#fx-resample", "name": "Resample", "text": "Prints the pad with its pitch and effects into a brand-new sample and points the pad at it with the effects cleared. The new sample is in the sample menu, ready to be chopped again or given more effects." }
+        {
+          "sel": "[aria-label=\"Filter type\"]",
+          "name": "Filter",
+          "text": "Low-pass removes highs (darker). High-pass removes lows (thinner). Band-pass keeps a band in the middle (telephone-like)."
+        },
+        {
+          "sel": "#fx-cutoff",
+          "name": "Cutoff and Resonance",
+          "text": "Cutoff is where the filter acts. Resonance adds a ringing peak at that point. Both appear when a filter is on."
+        },
+        {
+          "sel": "#fx-drive",
+          "name": "Drive",
+          "text": "Saturation. Low settings add warmth, the middle gets crunchy, the top is destroyed."
+        },
+        {
+          "sel": "#fx-delay",
+          "name": "Echo",
+          "text": "How loud the echoes are. The original sound stays at full level."
+        },
+        {
+          "sel": "[aria-label=\"Echo time\"]",
+          "name": "Echo time and Repeats",
+          "text": "Time is locked to the tempo: 1/16, 1/8, dotted 1/8 or 1/4 note. Repeats sets how long the echoes carry on."
+        },
+        {
+          "sel": "#fx-reverb",
+          "name": "Reverb",
+          "text": "How much of the pad goes into a space. 15 to 40% is normal; 100% is a wash."
+        },
+        {
+          "sel": "[aria-label=\"Reverb size\"]",
+          "name": "Space",
+          "text": "Room is short and tight, Hall is about two seconds, Vast is five."
+        },
+        {
+          "sel": "[aria-label=\"Stretch: length without changing pitch\"]",
+          "name": "Stretch",
+          "text": "Makes the slice longer or shorter without changing its pitch."
+        },
+        {
+          "sel": "[aria-label=\"Stretch the slice to a musical length\"]",
+          "name": "Fit to",
+          "text": "Stretches the slice to exactly a quarter note, half note, one bar or two bars at the current tempo. A button is greyed out when the slice would have to stretch more than four times or shrink below a quarter."
+        },
+        {
+          "sel": "#fx-scatter",
+          "name": "Scatter and Grain size",
+          "text": "Scatter makes tiny pieces of the slice jump around, turning a hit or a voice into a texture. Grain size sets how long those pieces are: shorter is cleaner on drums, longer is smoother on held sounds."
+        },
+        {
+          "sel": "[aria-label=\"Stutter\"]",
+          "name": "Stutter",
+          "text": "Repeats the first part of the slice ×2 to ×8 in the time the whole slice would take."
+        },
+        {
+          "sel": "#fx-hear",
+          "name": "Hear it",
+          "text": "Plays the pad without leaving the panel."
+        },
+        {
+          "sel": "#fx-reset",
+          "name": "Remove effects",
+          "text": "Switches every effect on this pad off."
+        },
+        {
+          "sel": "#fx-resample",
+          "name": "Resample",
+          "text": "Prints the pad with its pitch and effects into a brand-new sample and points the pad at it with the effects cleared. The new sample is in the sample menu, ready to be chopped again or given more effects."
+        }
       ]
     },
     {
-      "id": "roll", "title": "Piano roll and MIDI", "clip": ".chop",
+      "id": "roll",
+      "title": "Piano roll and MIDI",
+      "clip": ".chop",
       "intro": "The piano roll plays the selected pad's sound at other pitches, so one note can become a bassline, a melody or chords. Pads holding a single clear note work best.",
       "marks": [
-        { "sel": "#view-roll", "name": "Piano roll", "text": "Switches the top area to the piano roll for the selected pad. Select a different pad to write for a different sound." },
-        { "sel": "#scale", "name": "Scale", "text": "Only the notes of this scale get a row, so every row is a right note. Choose Chromatic to see every semitone." },
-        { "sel": "#root", "name": "Pad is", "text": "The note name of the pad's own pitch. It labels the rows and lines MIDI files up with the real key." },
-        { "sel": "[aria-label=\"New note length\"]", "name": "Length", "text": "How long a new note is when you tap." },
-        { "sel": "#clear-notes", "name": "Clear notes", "text": "Removes every note on this pad." },
-        { "sel": "#import-midi", "name": "Import MIDI", "text": "Reads a MIDI file's notes onto this pad. Notes too high or low are moved by octaves into range; notes past the end of the loop are left out, and you are told how many." },
-        { "sel": "#export-midi", "name": "Export MIDI", "text": "Saves the loop as a MIDI file: pad patterns and recorded hits on the drum channel, and a track for each pad that has notes." },
-        { "sel": "#connect-midi", "name": "Connect keyboard", "text": "Shown where the browser supports MIDI devices. With the piano roll open the keys play the selected pad; in Chop view, notes 36 to 51 hit the 16 pads. Recording captures what you play." },
-        { "sel": "#roll", "name": "The roll", "text": "Tap a square to add a note. Drag right while adding to make it longer. Tap a note to remove it. Tap a note name on the left to hear that pitch. The row marked ● is the pad's own pitch. Notes go through the pad's effects." }
+        {
+          "sel": "#view-roll",
+          "name": "Piano roll",
+          "text": "Switches the top area to the piano roll for the selected pad. Select a different pad to write for a different sound."
+        },
+        {
+          "sel": "#scale",
+          "name": "Scale",
+          "text": "Only the notes of this scale get a row, so every row is a right note. Choose Chromatic to see every semitone."
+        },
+        {
+          "sel": "#root",
+          "name": "Pad is",
+          "text": "The note name of the pad's own pitch. It labels the rows and lines MIDI files up with the real key."
+        },
+        {
+          "sel": "[aria-label=\"New note length\"]",
+          "name": "Length",
+          "text": "How long a new note is when you tap."
+        },
+        {
+          "sel": "#clear-notes",
+          "name": "Clear notes",
+          "text": "Removes every note on this pad."
+        },
+        {
+          "sel": "#import-midi",
+          "name": "Import MIDI",
+          "text": "Reads a MIDI file's notes onto this pad. Notes too high or low are moved by octaves into range; notes past the end of the loop are left out, and you are told how many."
+        },
+        {
+          "sel": "#export-midi",
+          "name": "Export MIDI",
+          "text": "Saves the loop as a MIDI file: pad patterns and recorded hits on the drum channel, and a track for each pad that has notes."
+        },
+        {
+          "sel": "#connect-midi",
+          "name": "Connect keyboard",
+          "text": "Shown where the browser supports MIDI devices. With the piano roll open the keys play the selected pad; in Chop view, notes 36 to 51 hit the 16 pads. Recording captures what you play."
+        },
+        {
+          "sel": "#roll",
+          "name": "The roll",
+          "text": "Tap a square to add a note. Drag right while adding to make it longer. Tap a note to remove it. Tap a note name on the left to hear that pitch. The row marked ● is the pad's own pitch. Notes go through the pad's effects."
+        }
       ]
     },
     {
-      "id": "library", "title": "Library: sounds", "clip": ".sheet",
+      "id": "library",
+      "title": "Library: sounds",
+      "clip": ".sheet",
       "intro": "Sounds you save stay in this browser between sessions and can go into any project.",
       "marks": [
-        { "sel": "#lib-tab-sounds", "name": "Sounds / Projects", "text": "Switch between saved sounds and saved projects." },
-        { "sel": "#lib-upload", "name": "Add audio files", "text": "Add one or many files straight into the Library without putting them in the project." },
-        { "sel": "#lib-save-loop", "name": "Save current loop", "text": "Renders the loop that is playing now and saves it as a sound." },
-        { "sel": "#lib-search", "name": "Search", "text": "Filters by name or tag. The tag buttons beside it filter with one tap." },
-        { "sel": ".lib-row .btn.icon", "name": "Preview", "text": "Plays the sound. Tap again to stop." },
-        { "sel": ".lib-row button:has-text(\"To chop view\")", "name": "To chop view", "text": "Adds the sound to the project and shows it in the chop view for cutting." },
-        { "sel": ".lib-row button:has-text(\"To pad\")", "name": "To pad", "text": "Puts the whole sound on the selected pad. Select the pad you want before opening the Library." },
-        { "sel": ".lib-row button:has-text(\"Rename\")", "name": "Rename / tag", "text": "Change the name and add tags, separated by commas, such as kick, vocal, dark." },
-        { "sel": ".lib-row button:has-text(\"Download\")", "name": "Download", "text": "Saves the sound to your device." },
-        { "sel": ".lib-row button:has-text(\"Delete\")", "name": "Delete", "text": "Tap twice to remove the sound from the Library. Projects that already use it are not affected." }
+        {
+          "sel": "#lib-tab-sounds",
+          "name": "Sounds / Projects",
+          "text": "Switch between saved sounds and saved projects."
+        },
+        {
+          "sel": "#lib-upload",
+          "name": "Add audio files",
+          "text": "Add one or many files straight into the Library without putting them in the project."
+        },
+        {
+          "sel": "#lib-save-loop",
+          "name": "Save current loop",
+          "text": "Renders the loop that is playing now and saves it as a sound."
+        },
+        {
+          "sel": "#lib-search",
+          "name": "Search",
+          "text": "Filters by name or tag. The tag buttons beside it filter with one tap."
+        },
+        {
+          "sel": ".lib-row .btn.icon",
+          "name": "Preview",
+          "text": "Plays the sound. Tap again to stop."
+        },
+        {
+          "sel": ".lib-row button:has-text(\"To chop view\")",
+          "name": "To chop view",
+          "text": "Adds the sound to the project and shows it in the chop view for cutting."
+        },
+        {
+          "sel": ".lib-row button:has-text(\"To pad\")",
+          "name": "To pad",
+          "text": "Puts the whole sound on the selected pad. Select the pad you want before opening the Library."
+        },
+        {
+          "sel": ".lib-row button:has-text(\"Rename\")",
+          "name": "Rename / tag",
+          "text": "Change the name and add tags, separated by commas, such as kick, vocal, dark."
+        },
+        {
+          "sel": ".lib-row button:has-text(\"Download\")",
+          "name": "Download",
+          "text": "Saves the sound to your device."
+        },
+        {
+          "sel": ".lib-row button:has-text(\"Delete\")",
+          "name": "Delete",
+          "text": "Tap twice to remove the sound from the Library. Projects that already use it are not affected."
+        }
       ],
-      "notes": ["Other ways in: Save to library in the chop view saves the whole sample, and Save to library on the Pad tab saves one pad exactly as it sounds.", "The Library lives in this browser on this device. Clearing the browser's site data removes it, so download anything you cannot afford to lose."]
-    },
-    {
-      "id": "projects", "title": "Library: projects", "clip": ".sheet",
-      "intro": "What is on screen is always autosaved. Save it under a name to keep it while you start something else.",
-      "marks": [
-        { "sel": "#proj-name", "name": "Project name", "text": "Type a name for what is on screen now." },
-        { "sel": "#proj-save", "name": "Save project", "text": "Saves it. Using a name that already exists updates that project." },
-        { "sel": ".lib-row button:has-text(\"Open\")", "name": "Open", "text": "Tap twice. It replaces what is on screen, so save first if you want to keep it." },
-        { "sel": ".lib-row button:has-text(\"Delete\")", "name": "Delete", "text": "Tap twice to remove the saved project." }
+      "notes": [
+        "Other ways in: Save to library in the chop view saves the whole sample, and Save to library on the Pad tab saves one pad exactly as it sounds.",
+        "The Library lives in this browser on this device. Clearing the browser's site data removes it, so download anything you cannot afford to lose."
       ]
     },
     {
-      "id": "assistant", "title": "Assistant", "clip": ".chat",
+      "id": "projects",
+      "title": "Library: projects",
+      "clip": ".sheet",
+      "intro": "What is on screen is always autosaved. Save it under a name to keep it while you start something else.",
+      "marks": [
+        {
+          "sel": "#proj-name",
+          "name": "Project name",
+          "text": "Type a name for what is on screen now."
+        },
+        {
+          "sel": "#proj-save",
+          "name": "Save project",
+          "text": "Saves it. Using a name that already exists updates that project."
+        },
+        {
+          "sel": ".lib-row button:has-text(\"Open\")",
+          "name": "Open",
+          "text": "Tap twice. It replaces what is on screen, so save first if you want to keep it."
+        },
+        {
+          "sel": ".lib-row button:has-text(\"Delete\")",
+          "name": "Delete",
+          "text": "Tap twice to remove the saved project."
+        }
+      ]
+    },
+    {
+      "id": "assistant",
+      "title": "Assistant",
+      "clip": ".chat",
       "intro": "A producer in a chat panel that can operate the studio. It cannot hear, so it measures each pad to tell a kick from a hat, and says when it is unsure.",
       "marks": [
-        { "sel": ".chat-empty .btn.starter", "name": "Starters", "text": "Tap one to send it, or use them as examples of what to ask." },
-        { "sel": "#chat-input", "name": "Message box", "text": "Ask in your own words: build a beat from these pads, write a phrygian bassline on A4, put a dark low-pass and dotted echo on A3, how do I get a less generic sound out of Suno. Enter sends; Shift+Enter makes a new line." },
-        { "sel": "#chat-send", "name": "Send / Stop", "text": "Sends the message. While it is working this becomes Stop." },
-        { "sel": "#chat-close", "name": "Close", "text": "Hides the panel. The conversation is kept until you start a new chat or reload the page." }
+        {
+          "sel": ".chat-empty .btn.starter",
+          "name": "Starters",
+          "text": "Tap one to send it, or use them as examples of what to ask."
+        },
+        {
+          "sel": "#chat-input",
+          "name": "Message box",
+          "text": "Ask in your own words: build a beat from these pads, write a phrygian bassline on A4, put a dark low-pass and dotted echo on A3, how do I get a less generic sound out of Suno. Enter sends; Shift+Enter makes a new line."
+        },
+        {
+          "sel": "#chat-send",
+          "name": "Send / Stop",
+          "text": "Sends the message. While it is working this becomes Stop."
+        },
+        {
+          "sel": "#chat-close",
+          "name": "Close",
+          "text": "Hides the panel. The conversation is kept until you start a new chat or reload the page."
+        }
       ],
-      "notes": ["Each change it makes is listed with a tick. Under its reply, Undo these changes takes back everything from that reply in one tap.", "In the Claude page it runs on your own Claude account and asks permission the first time. On the web link it needs an Anthropic API key, which stays in that browser."]
+      "notes": [
+        "Each change it makes is listed with a tick. Under its reply, Undo these changes takes back everything from that reply in one tap.",
+        "In the Claude page it runs on your own Claude account and asks permission the first time. On the web link it needs an Anthropic API key, which stays in that browser."
+      ]
     }
   ],
   "workflows": [
-    { "title": "Chop a track onto pads", "steps": ["Tap Import audio and choose a WAV or MP3.", "Tap Auto-slice. Move the slider beside it until the cuts sit on the hits you want.", "Fix any cut by dragging its yellow marker, or switch the tool to Add cut or Remove cut.", "Tap Send to pads.", "Tap the pads to play your slices."] },
-    { "title": "Record a loop", "steps": ["Set the tempo, loop length and Snap in the top bar.", "Turn on Click if you want a metronome.", "Tap Record. The loop starts.", "Play the pads. Each hit comes back the next time round.", "Tap Record again to stop recording, or Stop to end. One Undo removes the whole take."] },
-    { "title": "Program a beat with steps", "steps": ["Tap the pad you want, for example your kick.", "On the Steps tab, tap steps 1, 5, 9 and 13.", "Tap another pad and give it its own steps. Tap a step twice for a soft hit.", "Press Play and adjust while it loops. Add Swing to loosen it."] },
-    { "title": "Turn one note into a bassline", "steps": ["Find a slice that is one clear note and tap its pad.", "Switch the top area to Piano roll.", "Pick a scale. Set Pad is to the note's name if you know it.", "Tap squares to place notes; drag right for longer ones.", "Press Play. Open the FX tab to shape the sound."] },
-    { "title": "Make a loop fit the tempo", "steps": ["Put the loop on a pad as one slice.", "Open the FX tab.", "Under Fit to, tap the length it should last: 1/4, 1/2, Bar or 2 bars.", "If it sounds grainy, change Grain size: shorter for drums, longer for held sounds."] },
-    { "title": "Design a new sound and reuse it", "steps": ["Pick a pad and open the FX tab.", "Stack effects: try Stretch ×4, Scatter and a Vast reverb on a vocal fragment.", "Tap Resample. The pad now plays the printed result.", "Switch to Chop view: the resampled sound is in the sample menu. Cut it up and send the pieces to another bank.", "Tap Save to library on the Pad tab to keep the best ones."] },
-    { "title": "Save and share your work", "steps": ["Tap Export in the top bar for an audio file of the loop.", "In Piano roll view, tap Export MIDI for the notes and patterns.", "Open the Library, go to Projects, type a name and tap Save project to keep the whole session."] }
+    {
+      "title": "Chop a track onto pads",
+      "steps": [
+        "Tap Import audio and choose a WAV or MP3.",
+        "Tap Auto-slice. Move the slider beside it until the cuts sit on the hits you want.",
+        "Fix any cut by dragging its yellow marker, or switch the tool to Add cut or Remove cut.",
+        "Tap Send to pads.",
+        "Tap the pads to play your slices."
+      ]
+    },
+    {
+      "title": "Record a loop",
+      "steps": [
+        "Set the tempo, loop length and Snap in the top bar.",
+        "Turn on Click if you want a metronome.",
+        "Tap Record. The loop starts.",
+        "Play the pads. Each hit comes back the next time round.",
+        "Tap Record again to stop recording, or Stop to end. One Undo removes the whole take."
+      ]
+    },
+    {
+      "title": "Program a beat with steps",
+      "steps": [
+        "Tap the pad you want, for example your kick.",
+        "On the Steps tab, tap steps 1, 5, 9 and 13.",
+        "Tap another pad and give it its own steps. Tap a step twice for a soft hit.",
+        "Press Play and adjust while it loops. Add Swing to loosen it."
+      ]
+    },
+    {
+      "title": "Turn one note into a bassline",
+      "steps": [
+        "Find a slice that is one clear note and tap its pad.",
+        "Switch the top area to Piano roll.",
+        "Pick a scale. Set Pad is to the note's name if you know it.",
+        "Tap squares to place notes; drag right for longer ones.",
+        "Press Play. Open the FX tab to shape the sound."
+      ]
+    },
+    {
+      "title": "Make a loop fit the tempo",
+      "steps": [
+        "Put the loop on a pad as one slice.",
+        "Open the FX tab.",
+        "Under Fit to, tap the length it should last: 1/4, 1/2, Bar or 2 bars.",
+        "If it sounds grainy, change Grain size: shorter for drums, longer for held sounds."
+      ]
+    },
+    {
+      "title": "Design a new sound and reuse it",
+      "steps": [
+        "Pick a pad and open the FX tab.",
+        "Stack effects: try Stretch ×4, Scatter and a Vast reverb on a vocal fragment.",
+        "Tap Resample. The pad now plays the printed result.",
+        "Switch to Chop view: the resampled sound is in the sample menu. Cut it up and send the pieces to another bank.",
+        "Tap Save to library on the Pad tab to keep the best ones."
+      ]
+    },
+    {
+      "title": "Save and share your work",
+      "steps": [
+        "Tap Export in the top bar for an audio file of the loop.",
+        "In Piano roll view, tap Export MIDI for the notes and patterns.",
+        "Open the Library, go to Projects, type a name and tap Save project to keep the whole session."
+      ]
+    }
   ],
   "shortcuts": [
-    ["Space", "Play / Stop"],
-    ["Z X C V", "Pads 1 to 4"],
-    ["A S D F", "Pads 5 to 8"],
-    ["Q W E R", "Pads 9 to 12"],
-    ["1 2 3 4", "Pads 13 to 16"],
-    ["Enter", "Send a message to the Assistant"],
-    ["Shift + Enter", "New line in the Assistant box"]
+    [
+      "Space",
+      "Play / Stop"
+    ],
+    [
+      "Z X C V",
+      "Pads 1 to 4"
+    ],
+    [
+      "A S D F",
+      "Pads 5 to 8"
+    ],
+    [
+      "Q W E R",
+      "Pads 9 to 12"
+    ],
+    [
+      "1 2 3 4",
+      "Pads 13 to 16"
+    ],
+    [
+      "Enter",
+      "Send a message to the Assistant"
+    ],
+    [
+      "Shift + Enter",
+      "New line in the Assistant box"
+    ]
   ]
 }

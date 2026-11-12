@@ -11,6 +11,7 @@ import type { ScaleName } from '../core/types';
 import { autoSlice, boot, exportLoopWav, exportMidi, gridSlice, importFile, importMidi, onSaveState, resamplePad, savePadToLibrary, saveSampleToLibrary, saveState } from './actions';
 import { Guide } from './Guide';
 import { Library } from './Library';
+import { MODULES } from './modules';
 import { PianoRoll } from './PianoRoll';
 import { padHue } from './colors';
 import { inArtifact } from '../ai/viewer';
@@ -57,6 +58,7 @@ function Studio() {
   const [panel, setPanel] = useState<'steps' | 'pad' | 'fx'>('steps');
   const [msg, setMsg] = useState<string | null>(null);
   const [chat, setChat] = useState(false);
+  const [module, setModule] = useState('studio');
   const [sheet, setSheet] = useState<'library' | 'guide' | null>(null);
   const [view, setView] = useState<'chop' | 'roll'>('chop');
   const [noteLen, setNoteLen] = useState(STEP_TICKS * 2);
@@ -79,6 +81,15 @@ function Studio() {
       {sheet === 'guide' && <Guide onClose={() => setSheet(null)} />}
       <Transport p={p} say={setMsg} chat={chat} toggleChat={() => setChat(!chat)} openSheet={setSheet} />
       {msg && <div className="toast" role="status" onClick={() => setMsg(null)}>{msg}</div>}
+      <nav className="modules" aria-label="Modules">
+        {MODULES.map((m) => (
+          <button key={m.id} id={`mod-${m.id}`} className={module === m.id ? 'mod on' : 'mod'} aria-current={module === m.id ? 'page' : undefined} onClick={() => setModule(m.id)}>
+            {m.name}{!m.built && <span className="soon">soon</span>}
+          </button>
+        ))}
+      </nav>
+      {module !== 'studio' ? <Planned id={module} back={() => setModule('studio')} /> : (
+        <>
       <section className="chop">
         {view === 'chop' ? (
           <>
@@ -105,6 +116,8 @@ function Studio() {
           {panel === 'steps' ? <Steps p={p} /> : panel === 'pad' ? <PadEdit p={p} say={setMsg} /> : <FxEdit p={p} say={setMsg} />}
         </div>
       </section>
+        </>
+      )}
     </div>
   );
 }
@@ -477,5 +490,25 @@ function RollBar({ p, say, noteLen, setNoteLen, switcher }: { p: Project; say: (
           : <span className="meta">{devices.length ? devices.join(', ') : 'No MIDI device found'}</span>)}
       </div>
     </div>
+  );
+}
+
+/** The page behind a tab whose tool is not built yet: what it will do, where it is in the queue, and what works today. */
+function Planned({ id, back }: { id: string; back: () => void }) {
+  const m = MODULES.find((x) => x.id === id)!;
+  return (
+    <section className="planned">
+      <div className="planned-card">
+        <p className="planned-tag">Not built yet · number {m.order} in the build order</p>
+        <h2>{m.name}</h2>
+        <p className="planned-what">{m.what}</p>
+        <h3>What it will do</h3>
+        <ul>{m.will!.map((w) => <li key={w}>{w}</li>)}</ul>
+        {m.needs && (<><h3>What it needs</h3><p>{m.needs}</p></>)}
+        <h3>What you can do today</h3>
+        <p>{m.today}</p>
+        <button className="btn primary" onClick={back}>Back to the Sampler</button>
+      </div>
+    </section>
   );
 }

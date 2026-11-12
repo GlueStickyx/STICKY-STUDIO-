@@ -30,7 +30,7 @@ button, select, input { font: inherit; color: inherit; }
 .warn { color: var(--rec) !important; }
 
 .studio {
-  height: 100%; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(150px, 1fr) auto; gap: 8px;
+  height: 100%; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(150px, 1fr) auto; gap: 8px;
   padding-block: 8px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
@@ -213,7 +213,7 @@ kbd { display: inline-block; min-width: 26px; text-align: center; padding: 3px 7
 /* Portrait and phones: stack pads above the side panel and let the page scroll. */
 @media (max-aspect-ratio: 1/1), (max-width: 640px) {
   html, body, #root { height: auto; min-height: 100%; }
-  .studio { height: auto; grid-template-rows: auto auto auto; }
+  .studio { height: auto; grid-template-rows: auto auto auto auto; }
   .wave-canvas { min-height: 170px; }
   .perform { flex-direction: column; height: auto; }
   .padwrap { flex-direction: column; align-items: center; }
@@ -226,3 +226,66 @@ kbd { display: inline-block; min-width: 26px; text-align: center; padding: 3px 7
   .studio.with-chat { padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-bottom: 62vh; }
   .chat { top: auto; left: 0; width: auto; height: 60vh; border-left: 0; border-top: 1px solid var(--line); padding-left: max(10px, env(safe-area-inset-left, 0px)); }
 }
+
+/* Module tabs: one per tool. Tools not built yet are marked "soon" and open a page that says so. */
+.modules { display: flex; gap: 4px; overflow-x: auto; padding: 4px; border-radius: 10px; scrollbar-width: none; }
+.modules::-webkit-scrollbar { display: none; }
+.mod { flex: none; min-height: 40px; padding: 0 16px; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--dim); cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.mod.on { color: #17150a; background: var(--accent); }
+.soon { font: 600 9px var(--mono); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 5px; border-radius: 4px; background: #0008; color: var(--dim); }
+.mod.on .soon { background: #0003; color: #17150a; }
+.planned { grid-row: span 2; overflow-y: auto; display: grid; place-items: start center; padding: 8px 0; -webkit-user-select: text; user-select: text; }
+.planned-card { width: min(100%, 640px); padding: 22px 24px; border-radius: 12px; display: flex; flex-direction: column; gap: 6px; line-height: 1.5; }
+.planned-card h2 { margin: 0; font-size: 26px; letter-spacing: -0.01em; }
+.planned-card h3 { margin: 10px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); }
+.planned-card p, .planned-card ul { margin: 0; }
+.planned-card ul { padding-left: 20px; }
+.planned-what { font-size: 16px; }
+.planned-tag { font: 600 11px var(--mono); color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; }
+.planned-card .btn { align-self: flex-start; margin-top: 14px; }
+
+/* ---- Skeuomorphic skin: hardware faceplates, raised keys, rubber pads, recessed displays ---- */
+body { background: radial-gradient(120% 80% at 50% 0%, #1d1f25 0%, #111215 60%, #0c0d0f 100%) fixed; }
+.transport, .modules, .panel, .planned-card, .lib-row, .flow, .mark-list li, .guide-note, .chat {
+  background: linear-gradient(180deg, #24272e 0%, #1a1c21 100%);
+  border: 1px solid #08090a; box-shadow: inset 0 1px 0 #ffffff14, 0 2px 6px #0009;
+}
+.transport { padding: 8px 10px; border-radius: 12px; }
+.modules { background: linear-gradient(180deg, #17191d, #1e2026); box-shadow: inset 0 2px 5px #000b, 0 1px 0 #ffffff0d; }
+.btn, .step {
+  background: linear-gradient(180deg, #3a3e48 0%, #282b33 55%, #22252b 100%);
+  border-color: #07080a; box-shadow: inset 0 1px 0 #ffffff26, inset 0 -1px 0 #0006, 0 2px 3px #000a; text-shadow: 0 -1px 0 #0008;
+}
+.btn:active, .step:active { filter: none; background: linear-gradient(180deg, #1f2227, #2a2d35); box-shadow: inset 0 2px 5px #000c; transform: translateY(1px); }
+.btn.on, .mod.on, .step.on {
+  background: linear-gradient(180deg, hsl(48 100% 72%), hsl(44 96% 52%)); border-color: hsl(40 90% 28%); color: #1a1500; text-shadow: 0 1px 0 #fff6;
+  box-shadow: inset 0 1px 0 #fff8, 0 0 14px hsl(48 100% 55% / 0.45), 0 2px 3px #000a;
+}
+.step.on { background: linear-gradient(180deg, hsl(var(--hue) 95% 70%), hsl(var(--hue) 85% 50%)); border-color: hsl(var(--hue) 80% 26%); box-shadow: inset 0 1px 0 #fff8, 0 0 12px hsl(var(--hue) 95% 55% / 0.5); }
+.step.soft { background: linear-gradient(180deg, hsl(var(--hue) 55% 40%), hsl(var(--hue) 50% 27%)); }
+.btn.primary { background: linear-gradient(180deg, #ffffff, #c9ccd4); border-color: #6d717b; color: #121316; text-shadow: 0 1px 0 #fff; }
+.btn.rec.on { background: linear-gradient(180deg, hsl(355 95% 68%), hsl(355 85% 46%)); border-color: hsl(355 80% 24%); color: #fff; box-shadow: inset 0 1px 0 #fff6, 0 0 16px hsl(355 95% 55% / 0.6); }
+.btn:disabled { box-shadow: none; }
+select, input[type="number"], .text, .chat-form textarea, .chat-key input {
+  background: linear-gradient(180deg, #0f1013, #17191d); border-color: #060607; box-shadow: inset 0 2px 4px #000c, 0 1px 0 #ffffff12;
+}
+.pos { background: #070807; border: 1px solid #000; border-radius: 6px; padding: 5px 10px; box-shadow: inset 0 2px 6px #000, 0 1px 0 #ffffff14; color: hsl(48 100% 62%); text-shadow: 0 0 8px hsl(48 100% 55% / 0.7); }
+.wave-canvas, .roll, .shot-wrap, .empty { background: #0b0c0e; border: 1px solid #000; box-shadow: inset 0 3px 10px #000d, 0 1px 0 #ffffff12; }
+.pad {
+  border-radius: 12px; border: 1px solid #050506;
+  background: radial-gradient(120% 120% at 30% 20%, #33363e 0%, #1d1f24 60%, #15161a 100%);
+  box-shadow: inset 0 1px 0 #ffffff1c, inset 0 -3px 6px #0009, 0 3px 5px #000b;
+}
+.pad.loaded {
+  background: radial-gradient(120% 120% at 30% 20%, hsl(var(--hue) 55% 34%) 0%, hsl(var(--hue) 50% 20%) 60%, hsl(var(--hue) 45% 13%) 100%);
+  border-color: hsl(var(--hue) 60% 10%);
+  box-shadow: inset 0 1px 0 hsl(var(--hue) 90% 75% / 0.45), inset 0 0 0 1px hsl(var(--hue) 80% 50% / 0.5), inset 0 -3px 8px #0009, 0 3px 5px #000b;
+}
+.pad:active { transform: translateY(1px); }
+.pad.lit {
+  background: radial-gradient(120% 120% at 40% 30%, hsl(var(--hue) 100% 82%) 0%, hsl(var(--hue) 95% 58%) 70%);
+  box-shadow: inset 0 1px 0 #fff9, 0 0 26px hsl(var(--hue) 95% 60% / 0.85), 0 0 6px hsl(var(--hue) 95% 70%);
+}
+.pad.sel { outline: 2px solid #fff; outline-offset: 2px; }
+.tab.on { text-shadow: 0 0 10px hsl(48 100% 60% / 0.5); }
+.mark { background: var(--accent); }
