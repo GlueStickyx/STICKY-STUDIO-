@@ -1,6 +1,6 @@
 // The command bus. Every change to the project goes through dispatch(): the UI, undo/redo,
 // autosave and (later) the AI assistant all use this one entry point.
-import { PITCH_MAX, PITCH_MIN, SCALES, BANK_COUNT, BAR_TICKS, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, defaultFx, emptyPad, emptyProject, sliceBounds } from './types';
+import { PITCH_MAX, PITCH_MIN, REVERBS, SCALES, STRETCH_MAX, STRETCH_MIN, BANK_COUNT, BAR_TICKS, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, defaultFx, emptyPad, emptyProject, sliceBounds } from './types';
 import type { LoopEvent, Note, Pad, PadFx, Project, Sample } from './types';
 
 type Handler = (p: Project, args: any) => Project;
@@ -72,7 +72,7 @@ export const commands: Record<string, CommandDef> = {
     })),
   },
   'pad.setFx': {
-    undoable: true, describe: 'Change effects on one pad: filter, cutoff, resonance, drive, delayMix, delayTime, delayFeedback, stutter',
+    undoable: true, describe: 'Change effects on one pad: filter, cutoff, resonance, drive, delayMix, delayTime, delayFeedback, stutter, reverb, reverbSize, stretch, grain, scatter',
     run: (p, a) => mapPad(p, a.pad, (pad) => {
       const f = pad.fx, n = a.fx as Partial<PadFx>;
       const num = (v: unknown, lo: number, hi: number, cur: number) => (typeof v === 'number' && Number.isFinite(v) ? clamp(v, lo, hi) : cur);
@@ -87,6 +87,11 @@ export const commands: Record<string, CommandDef> = {
           delayTime: n.delayTime !== undefined && n.delayTime in DELAY_TIMES ? n.delayTime : f.delayTime,
           delayFeedback: num(n.delayFeedback, 0, 0.85, f.delayFeedback),
           stutter: (STUTTERS as readonly number[]).includes(n.stutter as number) ? n.stutter! : f.stutter,
+          reverb: num(n.reverb, 0, 1, f.reverb),
+          reverbSize: n.reverbSize !== undefined && n.reverbSize in REVERBS ? n.reverbSize : f.reverbSize,
+          stretch: num(n.stretch, STRETCH_MIN, STRETCH_MAX, f.stretch),
+          grain: num(n.grain, 20, 200, f.grain),
+          scatter: num(n.scatter, 0, 1, f.scatter),
         },
       };
     }),

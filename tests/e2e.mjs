@@ -82,6 +82,27 @@ try {
   const lone = await exportStats();
   check('without echo the middle of the loop is silent', lone.rms(0.35, 0.7) < 0.0005, lone.rms(0.35, 0.7).toFixed(5));
   await page.click('#tab-fx');
+  // Stretch: the kick on the last step normally ends 0.15 s into the next pass; at twice the length it runs to 0.45 s.
+  check('unstretched, 0.2-0.4 s is silent', lone.rms(0.2, 0.4) < 0.0005, lone.rms(0.2, 0.4).toFixed(5));
+  await page.click('#fx-stretch-2');
+  const long = await exportStats();
+  check('stretch x2 makes the slice last twice as long', long.rms(0.2, 0.4) > 0.01 && long.rms(0.5, 0.7) < 0.0005, `${long.rms(0.2, 0.4).toFixed(4)} then ${long.rms(0.5, 0.7).toFixed(5)}`);
+  await page.click('#fx-fit-1');
+  check('fit to 1/4 sets the stretch to one beat', (await page.locator('.fx-row .meta').innerText()).includes('0.60 s'), await page.locator('.fx-row .meta').innerText());
+  await page.click('#fx-stretch-1');
+  await page.fill('#fx-scatter', '1');
+  const cloud = await exportStats();
+  check('scatter changes the sound but not its length', Math.abs(cloud.rms(4.65, 4.8) - lone.rms(4.65, 4.8)) > 0.0005 && cloud.rms(0.2, 0.4) < 0.0005);
+  await page.click('#fx-reset');
+  await page.fill('#fx-reverb', '1');
+  await page.click('#fx-space-vast');
+  const wet = await exportStats();
+  // The pattern repeats each bar, so the kick lands at 2.25 s and 4.65 s; 1.2-1.6 s is more than a second after either.
+  check('reverb tail fills the gap and wraps round the loop', wet.rms(0.35, 0.7) > 0.002 && wet.rms(1.2, 1.6) > 0.0002 && wet.rms(0.35, 0.7) > wet.rms(1.2, 1.6), `${wet.rms(0.35, 0.7).toFixed(4)}, ${wet.rms(1.2, 1.6).toFixed(5)}`);
+  await page.click('#fx-space-room');
+  const room = await exportStats();
+  check('a room is much shorter than vast', room.rms(1.2, 1.6) < wet.rms(1.2, 1.6) * 0.05, `${room.rms(1.2, 1.6).toFixed(6)} vs ${wet.rms(1.2, 1.6).toFixed(5)}`);
+  await page.click('#fx-reset');
   await page.fill('#fx-delay', '1');
   await page.click('#fx-time-1-4');
   const echoed = await exportStats();

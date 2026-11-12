@@ -34,10 +34,11 @@ Done: import, chop (manual + transient + grid), 16 pads, pad edit, loop recordin
 step sequencer, undo/redo, autosave, WAV export, AI assistant (Claude: own API key on the web build, viewer's account in the artifact build),
 
 four pad banks (A-D, 64 pads; assistant addresses pads as "A1".."D16").
-per-pad effects (filter, drive, tempo-synced echo, stutter) and resampling a pad into a new sample.
+per-pad effects (filter, drive, tempo-synced echo, stutter, reverb, granular stretch and scatter) and
+resampling a pad into a new sample. Random choices in audio use the seeded `prng()` so export = playback.
 piano roll per pad (the pad's sound repitched, scale-folded rows), MIDI file export/import
 (`src/core/midi.ts`), MIDI keyboard input (`src/audio/midiin.ts`; untested on real hardware).
 
-Next, one slice at a time: more effects (reverb, granular) → Suno studio tab → stems → clip launcher and arrangement →
+Next, one slice at a time: Suno studio tab → stems → clip launcher and arrangement →
 knowledge library and local-model/MCP connections for the assistant → workflow canvas → mic sampling (owner deferred it; web build only, artifact pages have no microphone) →
 desktop shell with plugin hosting.

@@ -3,7 +3,7 @@ import { engine } from '../audio/engine';
 import { canRedo, canUndo, dispatch, getProject, redo, subscribe, undo } from '../core/bus';
 import { loopTicks } from '../core/sequence';
 import { BANK_COUNT, BANK_NAMES, BAR_TICKS, PAD_COUNT, PPQ, STEP_TICKS, TOTAL_PADS, bankOf, padLabel, sliceBounds } from '../core/types';
-import { DELAY_TIMES, STUTTERS, fxActive } from '../core/types';
+import { DELAY_TIMES, REVERBS, STRETCH_MAX, STRETCH_MIN, STUTTERS, fxActive, isGranular } from '../core/types';
 import type { FilterType, PadFx, Project } from '../core/types';
 import { connectMidi, midiSupported, setMidiMode } from '../audio/midiin';
 import { NOTE_NAMES, SCALES } from '../core/types';
@@ -334,6 +334,7 @@ function FxEdit({ p, say }: { p: Project; say: (m: string | null) => void }) {
   const set = (patch: Partial<PadFx>, key: string) => dispatch('pad.setFx', { pad: i, fx: patch }, { group: `fx-${key}-${i}` });
   const hit = () => engine.hitPad(i);
   const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const natural = (pad.end - pad.start) / Math.pow(2, pad.semitones / 12); // seconds the slice lasts unstretched
   return (
     <div className="panel">
       <p className="panel-title">Pad {padLabel(i)} effects</p>
@@ -367,6 +368,38 @@ function FxEdit({ p, say }: { p: Project; say: (m: string | null) => void }) {
             <input id="fx-feedback" type="range" min={0} max={0.85} step={0.01} value={fx.delayFeedback} onChange={(e) => set({ delayFeedback: Number(e.target.value) }, 'fb')} /></label>
         </div>
       )}
+      <label className="slider">Reverb <span>{fx.reverb > 0 ? pct(fx.reverb) : 'Off'}</span>
+        <input id="fx-reverb" type="range" min={0} max={1} step={0.01} value={fx.reverb} onChange={(e) => set({ reverb: Number(e.target.value) }, 'reverb')} /></label>
+      {fx.reverb > 0 && (
+        <div className="fx-row">
+          <span className="fx-name">Space</span>
+          <div className="seg" role="radiogroup" aria-label="Reverb size">
+            {(Object.keys(REVERBS) as (keyof typeof REVERBS)[]).map((r) => <button key={r} id={`fx-space-${r}`} role="radio" aria-checked={fx.reverbSize === r} className={fx.reverbSize === r ? 'btn small on' : 'btn small'} onClick={() => set({ reverbSize: r }, 'space')}>{r[0].toUpperCase() + r.slice(1)}</button>)}
+          </div>
+        </div>
+      )}
+      <div className="fx-row">
+        <span className="fx-name">Stretch</span>
+        <div className="seg" role="radiogroup" aria-label="Stretch: length without changing pitch">
+          {[0.5, 1, 1.5, 2, 4].map((v) => <button key={v} id={`fx-stretch-${String(v).replace('.', '_')}`} role="radio" aria-checked={Math.abs(fx.stretch - v) < 0.001} className={Math.abs(fx.stretch - v) < 0.001 ? 'btn small on' : 'btn small'} onClick={() => set({ stretch: v }, 'stretch')}>{v === 1 ? 'Off' : `×${v}`}</button>)}
+        </div>
+        <span className="fx-name">Fit to</span>
+        <div className="seg" role="group" aria-label="Stretch the slice to a musical length">
+          {([[1, '1/4'], [2, '1/2'], [4, 'Bar'], [8, '2 bars']] as [number, string][]).map(([beats, label]) => {
+            const s = ((beats * 60) / p.bpm) / natural;
+            return <button key={beats} id={`fx-fit-${beats}`} className="btn small" disabled={s < STRETCH_MIN || s > STRETCH_MAX} title={`${s.toFixed(2)}× at ${p.bpm} BPM`} onClick={() => set({ stretch: s }, 'stretch')}>{label}</button>;
+          })}
+        </div>
+        {isGranular(fx) && <span className="meta">{fx.stretch.toFixed(2)}× · {(natural * fx.stretch).toFixed(2)} s</span>}
+      </div>
+      <div className="fx-pair">
+        <label className="slider">Scatter <span>{fx.scatter > 0 ? pct(fx.scatter) : 'Off'}</span>
+          <input id="fx-scatter" type="range" min={0} max={1} step={0.01} value={fx.scatter} onChange={(e) => set({ scatter: Number(e.target.value) }, 'scatter')} /></label>
+        {isGranular(fx) && (
+          <label className="slider">Grain size <span>{Math.round(fx.grain)} ms</span>
+            <input id="fx-grain" type="range" min={20} max={200} step={1} value={fx.grain} onChange={(e) => set({ grain: Number(e.target.value) }, 'grain')} /></label>
+        )}
+      </div>
       <div className="fx-row">
         <span className="fx-name">Stutter</span>
         <div className="seg" role="radiogroup" aria-label="Stutter">

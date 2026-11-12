@@ -2,8 +2,8 @@
 // recording a hit dispatches 'loop.addEvent' like any other change.
 import { dispatch, getProject, subscribe } from '../core/bus';
 import { beatsInWindow, hitsInWindow, loopTicks, quantizeTick, secondsPerTick } from '../core/sequence';
-import { DELAY_TIMES, TOTAL_PADS, uid } from '../core/types';
-import type { Pad, Project } from '../core/types';
+import { DELAY_TIMES, REVERBS, TOTAL_PADS, defaultFx, isGranular, uid } from '../core/types';
+import type { Pad, Project, ReverbSize } from '../core/types';
 import { computePeaks, mixToMono } from './analysis';
 
 const LOOKAHEAD_SEC = 0.12; // how far ahead hits are handed to the audio clock
@@ -26,12 +26,41 @@ function driveCurve(drive: number): Float32Array<ArrayBuffer> {
   return c;
 }
 
+/** Small deterministic random generator, so a rendered export matches what was heard. */
+function prng(seed: number) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+const impulses = new Map<string, Float32Array<ArrayBuffer>[]>();
+/** A synthetic room: decaying noise that darkens as it fades. Built once per size and sample rate. */
+function impulse(size: ReverbSize, sampleRate: number): Float32Array<ArrayBuffer>[] {
+  const key = `${size}@${sampleRate}`;
+  let ir = impulses.get(key);
+  if (!ir) {
+    const seconds = REVERBS[size], n = Math.round(seconds * sampleRate);
+    ir = [0, 1].map((ch) => {
+      const rnd = prng(1234 + ch * 77 + n), out = new Float32Array(n);
+      let lp = 0;
+      for (let i = 0; i < n; i++) {
+        const t = i / n;
+        lp += (0.9 - 0.75 * t) * ((rnd() * 2 - 1) - lp); // less treble in the tail
+        out[i] = lp * Math.exp(-6.9 * t) * Math.min(1, i / (0.004 * sampleRate));
+      }
+      return out;
+    });
+    impulses.set(key, ir);
+  }
+  return ir;
+}
+
 /**
- * Where voices go. One per audio context (live, or one offline render). It owns the per-pad echo lines,
- * which must outlive individual voices so their tails keep ringing.
+ * Where voices go. One per audio context (live, or one offline render). It owns the per-pad echo lines
+ * and the shared reverbs, which must outlive individual voices so their tails keep ringing.
  */
 export class Mixer {
   private delays = new Map<number, { input: GainNode; delay: DelayNode; fb: GainNode }>();
+  private reverbs = new Map<ReverbSize, ConvolverNode>();
   constructor(readonly ctx: Ctx, readonly out: AudioNode) {}
 
   /** Bring echo settings in line with the project. Cheap; call whenever the project changes. */
@@ -50,20 +79,42 @@ export class Mixer {
   }
   /** The echo input for a pad, or null when the pad has no echo line yet. */
   send(i: number): AudioNode | null { return this.delays.get(i)?.input ?? null; }
+  /** The shared reverb of one size, created on first use. */
+  reverb(size: ReverbSize): AudioNode {
+    let c = this.reverbs.get(size);
+    if (!c) {
+      c = this.ctx.createConvolver();
+      const ir = impulse(size, this.ctx.sampleRate);
+      const buf = this.ctx.createBuffer(2, ir[0].length, this.ctx.sampleRate);
+      buf.copyToChannel(ir[0], 0); buf.copyToChannel(ir[1], 1);
+      c.buffer = buf;
+      const wet = this.ctx.createGain();
+      wet.gain.value = 1.6; // the normalised impulse is quiet next to the dry sound
+      c.connect(wet).connect(this.out);
+      this.reverbs.set(size, c);
+    }
+    return c;
+  }
 }
 
-/** Start one pad voice, with its effects, on any context (live or offline). */
-/** `note` plays the pad as an instrument: shifted by `pitch` semitones and held for at most `dur` seconds. */
+/**
+ * Start one pad voice, with its effects, on any context (live or offline).
+ * `note` plays the pad as an instrument: shifted by `pitch` semitones and held for at most `dur` seconds.
+ */
 export function playPadVoice(mixer: Mixer, padIndex: number, buffer: AudioBuffer, reversed: AudioBuffer | null, pad: Pad, time: number, vel: number, note?: { pitch: number; dur: number }): Voice | null {
   const ctx = mixer.ctx;
   const fx = pad.fx;
   const rate = Math.pow(2, (pad.semitones + (note?.pitch ?? 0)) / 12);
-  const len = Math.min(pad.end - pad.start, note ? note.dur * rate : Infinity);
+  const granular = isGranular(fx);
+  const stretch = granular ? fx.stretch : 1;
+  // How long the voice sounds, and how much of the slice that covers.
+  const outDur = Math.min(((pad.end - pad.start) / rate) * stretch, note ? note.dur : Infinity);
+  const len = (outDur * rate) / stretch;
   if (len <= 0.001) return null;
   const offset = Math.max(0, pad.reverse ? buffer.duration - pad.end : pad.start);
   const src = pad.reverse && reversed ? reversed : buffer;
 
-  // Chain: sources -> [filter] -> [drive] -> level -> mixer out, with a tap to the pad's echo line.
+  // Chain: sources -> [filter] -> [drive] -> level -> mixer out, with taps to the pad's echo line and the reverb.
   const level = ctx.createGain();
   level.gain.value = pad.gain * vel * (1 - fx.drive * 0.45); // saturation makes things louder; pull it back
   let head: AudioNode = level;
@@ -83,25 +134,44 @@ export function playPadVoice(mixer: Mixer, padIndex: number, buffer: AudioBuffer
   level.connect(mixer.out);
   const send = fx.delayMix > 0 ? mixer.send(padIndex) : null;
   if (send) { const s = ctx.createGain(); s.gain.value = fx.delayMix; level.connect(s).connect(send); }
+  if (fx.reverb > 0) { const s = ctx.createGain(); s.gain.value = fx.reverb; level.connect(s).connect(mixer.reverb(fx.reverbSize)); }
 
-  // Stutter: the first 1/N of the slice, N times back to back. N = 1 is the plain slice.
-  const n = Math.max(1, fx.stutter);
-  const chunk = len / n, played = chunk / rate;
-  const fade = Math.min(0.006, played / 4);
   const sources: AudioBufferSourceNode[] = [];
-  for (let k = 0; k < n; k++) {
-    const t = time + k * played;
+  /** One enveloped piece of the buffer: `from` seconds into it, sounding for `dur` seconds from time `t`. */
+  const piece = (t: number, from: number, dur: number, fadeIn: number, fadeOut: number) => {
     const node = ctx.createBufferSource();
     node.buffer = src;
     node.playbackRate.value = rate;
     const env = ctx.createGain();
     env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(1, t + Math.min(0.002, played / 4));
-    env.gain.setValueAtTime(1, t + played - fade);
-    env.gain.linearRampToValueAtTime(0, t + played);
+    env.gain.linearRampToValueAtTime(1, t + fadeIn);
+    env.gain.setValueAtTime(1, Math.max(t + fadeIn, t + dur - fadeOut));
+    env.gain.linearRampToValueAtTime(0, t + dur);
     node.connect(env).connect(head);
-    node.start(t, offset, chunk);
+    node.start(t, Math.max(0, from), dur * rate);
     sources.push(node);
+  };
+
+  // Stutter: the first 1/N of the slice, N times back to back. N = 1 is the plain slice.
+  const n = Math.max(1, fx.stutter);
+  const chunk = len / n, played = outDur / n;
+  const rnd = prng(977 + padIndex * 31);
+  for (let k = 0; k < n; k++) {
+    const t = time + k * played;
+    if (!granular) { piece(t, offset, played, Math.min(0.002, played / 4), Math.min(0.006, played / 4)); continue; }
+    // Granular: short overlapping grains read through the slice at their own speed, so length and pitch
+    // are independent. Scatter lets each grain jump away from its place, smearing the sound into a texture.
+    let g = Math.min(fx.grain / 1000, played, chunk / rate);
+    let hop = g / 2;
+    if (played / hop > 500) { hop = played / 500; g = hop * 2; } // keep very long stretches affordable
+    const lastStart = offset + Math.max(0, chunk - g * rate);
+    for (let j = 0; j * hop < played; j++) {
+      const tj = j * hop;
+      const jump = fx.scatter > 0 ? (rnd() - 0.5) * fx.scatter * chunk : 0;
+      const from = Math.min(lastStart, Math.max(offset, offset + (tj / played) * chunk + jump));
+      const dur = Math.min(g, played - tj + hop);
+      piece(t + tj, from, dur, j === 0 ? Math.min(0.002, dur / 4) : dur / 2, dur / 2); // the first grain keeps its attack
+    }
   }
   let stopped = false;
   return {
@@ -351,7 +421,7 @@ export class Engine {
     const now = this.ctx.currentTime;
     this.auditionVoice?.stop(now);
     const plain: Pad = { ...getProject().pads[0], sampleId, start, end, gain: 1, semitones: 0, reverse: false, steps: [] };
-    plain.fx = { ...plain.fx, filter: 'off', drive: 0, delayMix: 0, stutter: 1 };
+    plain.fx = defaultFx();
     this.auditionVoice = playPadVoice(this.mixer, -1, buf, null, plain, now, 1);
   }
 
@@ -398,12 +468,13 @@ export class Engine {
     const pad = p.pads[i];
     const buf = pad.sampleId ? this.buffers.get(pad.sampleId) : undefined;
     if (!buf) return null;
-    const played = (pad.end - pad.start) / Math.pow(2, pad.semitones / 12);
     const fx = pad.fx;
+    const played = ((pad.end - pad.start) / Math.pow(2, pad.semitones / 12)) * (isGranular(fx) ? fx.stretch : 1);
     const echo = (DELAY_TIMES[fx.delayTime] * 60) / p.bpm;
     // Echo tail: until the repeats have decayed by 60 dB, at most 8 seconds.
     const tail = fx.delayMix > 0 ? Math.min(8, echo * (1 + (fx.delayFeedback > 0 ? Math.log(0.001) / Math.log(fx.delayFeedback) : 0))) : 0.02;
-    const { off, mixer, rev } = this.offline(played + tail, sampleRate);
+    const room = fx.reverb > 0 ? REVERBS[fx.reverbSize] : 0;
+    const { off, mixer, rev } = this.offline(played + Math.max(tail, room), sampleRate);
     playPadVoice(mixer, i, buf, pad.reverse ? rev(pad.sampleId!) : null, { ...pad, gain: 1 }, 0, 1);
     const out = await off.startRendering();
     return [out.getChannelData(0), out.getChannelData(1)];

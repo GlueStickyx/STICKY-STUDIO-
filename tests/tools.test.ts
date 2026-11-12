@@ -133,6 +133,16 @@ describe('writing', () => {
       expect(call('set_pad_effects', { pads: [bad] }).isError).toBe(true);
     }
   });
+  it('set_pad_effects handles reverb, stretch and scatter', () => {
+    expect(call('set_pad_effects', { pads: [{ pad: 'A1', reverb_level: 0.4, reverb_size: 'vast', stretch: 2, grain_ms: 40, scatter: 0.3 }] }).isError).toBe(false);
+    expect(getProject().pads[0].fx).toMatchObject({ reverb: 0.4, reverbSize: 'vast', stretch: 2, grain: 40, scatter: 0.3 });
+    expect(JSON.parse(call('get_studio_state', {}).text).pads[0].effects).toMatchObject({ reverb_size: 'vast', stretch: 2, scatter: 0.3 });
+    for (const bad of [{ pad: 'A1', stretch: 9 }, { pad: 'A1', stretch: 0.1 }, { pad: 'A1', reverb_size: 'cave' }, { pad: 'A1', grain_ms: 5 }, { pad: 'A1', scatter: 2 }, { pad: 'A1', reverb_level: -1 }]) {
+      expect(call('set_pad_effects', { pads: [bad] }).isError).toBe(true);
+    }
+    dispatch('pad.setFx', { pad: 0, fx: { stretch: 99, grain: 1, reverbSize: 'x', scatter: 7 } });
+    expect(getProject().pads[0].fx).toMatchObject({ stretch: 4, grain: 20, reverbSize: 'vast', scatter: 1 });
+  });
   it('pad.setFx ignores junk and clamps numbers', () => {
     dispatch('pad.setFx', { pad: 0, fx: { cutoff: 99999, drive: -4, stutter: 7, delayTime: 'x', filter: 'weird', delayFeedback: 3 } });
     expect(getProject().pads[0].fx).toMatchObject({ cutoff: 16000, drive: 0, stutter: 1, delayTime: '1/8d', filter: 'off', delayFeedback: 0.85 });

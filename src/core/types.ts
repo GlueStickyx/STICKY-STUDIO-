@@ -24,6 +24,10 @@ export type FilterType = 'off' | 'lowpass' | 'highpass' | 'bandpass';
 export const DELAY_TIMES = { '1/16': 0.25, '1/8': 0.5, '1/8d': 0.75, '1/4': 1 } as const; // in beats
 export type DelayTime = keyof typeof DELAY_TIMES;
 export const STUTTERS = [1, 2, 3, 4, 6, 8] as const;
+export const REVERBS = { room: 0.6, hall: 2, vast: 5 } as const; // decay time in seconds
+export type ReverbSize = keyof typeof REVERBS;
+export const STRETCH_MIN = 0.25;
+export const STRETCH_MAX = 4;
 
 /** Per-pad effects. Applied identically in live playback and in export. */
 export interface PadFx {
@@ -35,9 +39,17 @@ export interface PadFx {
   delayTime: DelayTime; // tempo-synced
   delayFeedback: number; // 0..0.85
   stutter: number; // 1 = off; N = the first 1/N of the slice repeated N times
+  reverb: number; // 0..1, level sent to the reverb (the dry sound stays at full level)
+  reverbSize: ReverbSize;
+  /** Length multiplier without changing pitch (granular time-stretch). 1 = off. */
+  stretch: number;
+  grain: number; // grain length in milliseconds, 20..200
+  /** 0..1: how far each grain may jump from its place in the slice. Above 0 turns the sound into a texture. */
+  scatter: number;
 }
-export const defaultFx = (): PadFx => ({ filter: 'off', cutoff: 2000, resonance: 0.2, drive: 0, delayMix: 0, delayTime: '1/8d', delayFeedback: 0.4, stutter: 1 });
-export const fxActive = (fx: PadFx) => fx.filter !== 'off' || fx.drive > 0 || fx.delayMix > 0 || fx.stutter > 1;
+export const defaultFx = (): PadFx => ({ filter: 'off', cutoff: 2000, resonance: 0.2, drive: 0, delayMix: 0, delayTime: '1/8d', delayFeedback: 0.4, stutter: 1, reverb: 0, reverbSize: 'hall', stretch: 1, grain: 70, scatter: 0 });
+export const fxActive = (fx: PadFx) => fx.filter !== 'off' || fx.drive > 0 || fx.delayMix > 0 || fx.stutter > 1 || fx.reverb > 0 || isGranular(fx);
+export const isGranular = (fx: PadFx) => Math.abs(fx.stretch - 1) > 0.001 || fx.scatter > 0;
 
 export interface Pad {
   sampleId: string | null;
