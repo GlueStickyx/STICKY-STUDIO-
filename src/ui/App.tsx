@@ -18,6 +18,7 @@ import { inArtifact } from '../ai/viewer';
 import { Arrange } from './Arrange';
 import { Analyze } from './Analyze';
 import { Chat } from './Chat';
+import { Suno } from './Suno';
 import { MixerView } from './MixerView';
 import { Clips } from './Clips';
 import { Waveform } from './Waveform';
@@ -93,7 +94,7 @@ function Studio() {
           </button>
         ))}
       </nav>
-      {module === 'analyze' ? <Analyze p={p} say={setMsg} /> : module === 'mixer' ? <MixerView p={p} /> : module === 'arrange' ? <Arrange p={p} say={setMsg} /> : module === 'clips' ? <Clips p={p} say={setMsg} toSampler={() => setModule('studio')} /> : module !== 'studio' ? <Planned id={module} back={() => setModule('studio')} /> : (
+      {module === 'suno' ? <Suno p={p} say={setMsg} /> : module === 'analyze' ? <Analyze p={p} say={setMsg} /> : module === 'mixer' ? <MixerView p={p} /> : module === 'arrange' ? <Arrange p={p} say={setMsg} /> : module === 'clips' ? <Clips p={p} say={setMsg} toSampler={() => setModule('studio')} /> : module !== 'studio' ? <Planned id={module} back={() => setModule('studio')} /> : (
         <>
       <section className="chop">
         {view === 'chop' ? (

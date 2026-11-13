@@ -23,6 +23,11 @@ export const inArtifact = () => runtime() !== null;
 export const useSample = () => safeUse<Sample>('sample');
 export const useDownloads = () => safeUse<Downloads>('downloads');
 
+/** The page's connector access (the Suno page uses it). Null outside a Claude artifact. */
+export interface McpError { code: string; message: string; retryable?: boolean }
+export interface Mcp { callTool: (server: string, tool: string, input?: unknown, options?: { cache?: false | object; signal?: AbortSignal }) => Promise<{ payload?: unknown }> }
+export const useMcp = () => safeUse<Mcp>('mcp');
+
 const MESSAGES: Record<string, string> = {
   cancelled: 'Stopped.',
   not_granted: 'Claude access was declined for this page. Reload the page to be asked again.',

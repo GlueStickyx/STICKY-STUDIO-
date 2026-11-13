@@ -123,6 +123,35 @@ export const emptyTracks = (): Track[] => Array.from({ length: TRACK_COUNT }, ()
 /** How loud a track plays right now: 0 when muted, or when another track is soloed. */
 export const trackGain = (tracks: Track[], i: number) => { const t = tracks[i]; return !t || t.mute || (tracks.some((x) => x.solo) && !t.solo) ? 0 : t.vol; };
 
+/** The Suno page's working draft: style pillars, lyrics and generation settings. */
+export const PILLARS = [
+  ['era', 'Era and aesthetic'], ['key', 'Key and mood'], ['tempo', 'Tempo and feel'], ['vocal', 'Vocal character'],
+  ['instrument', 'Lead instruments'], ['low', 'Drums, bass and low end'], ['mix', 'Production and mix'],
+] as const;
+export type PillarId = (typeof PILLARS)[number][0];
+export interface SunoJob { id: string; title: string; status: string; created: number; error?: string | null }
+export interface SunoDraft {
+  title: string;
+  pillars: Record<PillarId, string>;
+  /** When set, the style text is written by hand instead of joined from the pillars. */
+  styleOverride: string | null;
+  negative: string;
+  lyrics: string;
+  instrumental: boolean;
+  model: string; // '' = the plan's default
+  vocalGender: '' | 'male' | 'female';
+  weirdness: number | null; // null = Suno's default
+  styleInfluence: number | null;
+  variety: number | null;
+  jobs: SunoJob[];
+}
+export const emptySuno = (): SunoDraft => ({
+  title: '', pillars: { era: '', key: '', tempo: '', vocal: '', instrument: '', low: '', mix: '' }, styleOverride: null,
+  negative: '', lyrics: '', instrumental: false, model: '', vocalGender: '', weirdness: null, styleInfluence: null, variety: null, jobs: [],
+});
+/** The style text sent to Suno: the hand-written one, or the filled pillars joined in order. */
+export const sunoStyle = (d: SunoDraft) => d.styleOverride ?? PILLARS.map(([k]) => d.pillars[k].trim()).filter(Boolean).join(', ');
+
 export interface Project {
   version: 1;
   bpm: number;
@@ -141,6 +170,7 @@ export interface Project {
   tracks: Track[];
   arrangement: Placement[];
   mixer: MixerState;
+  suno: SunoDraft;
   /** Scale shown in the piano roll, counted from the pad's own pitch. */
   scale: ScaleName;
   /** Note name (0 = C) given to a pad's own pitch, for labels and MIDI files. */
@@ -156,7 +186,7 @@ export function emptyProject(): Project {
     version: 1, bpm: 120, swing: 0, bars: 2, quantize: STEP_TICKS, metronome: false,
     samples: [], activeSampleId: null,
     pads: Array.from({ length: TOTAL_PADS }, emptyPad),
-    selectedPad: 0, events: [], notes: [], clips: [], tracks: emptyTracks(), arrangement: [], mixer: emptyMixer(), scale: 'minor', root: 0,
+    selectedPad: 0, events: [], notes: [], clips: [], tracks: emptyTracks(), arrangement: [], mixer: emptyMixer(), suno: emptySuno(), scale: 'minor', root: 0,
   };
 }
 
@@ -173,7 +203,7 @@ export function parsePad(label: unknown): number | null {
 /** Bring a project saved by an older version up to the current shape. */
 export function normalizeProject(p: Project): Project {
   const pads = Array.from({ length: TOTAL_PADS }, (_, i) => (p.pads[i] ? { ...p.pads[i], fx: { ...defaultFx(), ...p.pads[i].fx } } : emptyPad()));
-  return { ...p, pads, selectedPad: Math.min(Math.max(0, p.selectedPad ?? 0), TOTAL_PADS - 1), notes: p.notes ?? [], clips: p.clips ?? [], arrangement: p.arrangement ?? [], mixer: p.mixer?.channels?.length === 4 ? p.mixer : emptyMixer(), tracks: p.tracks?.length === TRACK_COUNT ? p.tracks : emptyTracks(), scale: p.scale in SCALES ? p.scale : 'minor', root: p.root ?? 0 };
+  return { ...p, pads, selectedPad: Math.min(Math.max(0, p.selectedPad ?? 0), TOTAL_PADS - 1), notes: p.notes ?? [], clips: p.clips ?? [], arrangement: p.arrangement ?? [], mixer: p.mixer?.channels?.length === 4 ? p.mixer : emptyMixer(), suno: { ...emptySuno(), ...p.suno, pillars: { ...emptySuno().pillars, ...p.suno?.pillars } }, tracks: p.tracks?.length === TRACK_COUNT ? p.tracks : emptyTracks(), scale: p.scale in SCALES ? p.scale : 'minor', root: p.root ?? 0 };
 }
 
 export function uid(): string {

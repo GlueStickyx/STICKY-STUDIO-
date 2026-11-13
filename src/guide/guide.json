@@ -117,7 +117,7 @@
         {
           "sel": "#mod-suno",
           "name": "Suno",
-          "text": "Planned: style and lyric builder, generate, and your Suno library, inside the studio."
+          "text": "Build a Suno style and lyrics, generate, and browse your Suno library."
         },
         {
           "sel": "#mod-ai",
@@ -639,6 +639,55 @@
       ]
     },
     {
+      "id": "suno",
+      "title": "Suno",
+      "clip": ".suno",
+      "intro": "Write better Suno prompts and keep your Suno work next to your samples. The builder works everywhere. Generating, the queue and your Suno library work when the studio is opened in Claude with the Suno connector.",
+      "marks": [
+        {
+          "sel": "#suno-title",
+          "name": "Title",
+          "text": "Optional. Suno makes one up if you leave it empty."
+        },
+        {
+          "sel": "#pillar-era",
+          "name": "The seven parts",
+          "text": "Describe the sound piece by piece: era, key and mood, tempo, voice, lead instruments, drums and low end, and how it is mixed. Tap a suggestion under a box to add it, or type your own. Be specific: “rubbery 303 acid line” beats “synth”."
+        },
+        {
+          "sel": ".suno-style",
+          "name": "Style sent to Suno",
+          "text": "The seven parts joined together, ready to send. Edit by hand lets you rewrite it freely; Rebuild puts it back. Copy puts it on the clipboard for pasting into Suno itself."
+        },
+        {
+          "sel": "#suno-negative",
+          "name": "Keep out",
+          "text": "Sounds Suno should avoid. Use it for whatever generic thing a take keeps drifting towards."
+        },
+        {
+          "sel": ".chip.tag",
+          "name": "Section tags",
+          "text": "Tap to insert [Verse], [Chorus], [Drop] and the rest at the cursor, each on its own line."
+        },
+        {
+          "sel": "#suno-lyrics",
+          "name": "Lyrics",
+          "text": "Up to 5000 characters. Tick Instrumental to make a song with no vocals."
+        },
+        {
+          "sel": ".suno-side .panel",
+          "name": "Generate",
+          "text": "Model, voice, and three sliders: Weirdness (how far it strays), Style strength (how closely it follows your style) and Variety (how freely it reinterprets it). Leave a slider alone to let Suno decide. Generate asks you to confirm first, because it makes 2 songs and spends your Suno credits."
+        }
+      ],
+      "notes": [
+        "Queue: new songs appear here and update by themselves. Open in Suno plays them on suno.com. Get WAV asks Suno for a download link; if that needs one of your download credits, it asks you first.",
+        "Your Suno library: search your songs, open them, download them, or tap Use its style to load a song's style into the builder and change it.",
+        "Getting sounds between Suno and the studio takes one extra step each way, because the studio page cannot fetch files from Suno: download from Suno, then use Import audio. To send a loop to Suno, export it, tap Start upload, pick the file on Suno's page, then tap Done.",
+        "The Assistant can fill in the builder for you: ask it to write a Suno prompt for the track you are making. It never generates; you review and press Generate."
+      ]
+    },
+    {
       "id": "library",
       "title": "Library: sounds",
       "clip": ".sheet",
@@ -780,6 +829,17 @@
         "Tap ▶ on suggestions to hear them. Tick the ones you like.",
         "Choose a bank and tap Send to pads.",
         "Open the Sampler, switch to that bank and play. Shape the sounds on the FX tab."
+      ]
+    },
+    {
+      "title": "Get a less generic sound from Suno",
+      "steps": [
+        "Open the Suno tab.",
+        "Fill the seven parts with specific sounds, not genres: tap the suggestions to start.",
+        "Add the stock sounds you keep getting to Keep out.",
+        "Generate, listen in Suno, and keep the best take.",
+        "Download it, Import it here, Analyze or chop it, reshape it on the FX tab, and export your own loop.",
+        "Send that loop back to Suno with Start upload, and use it in your next song."
       ]
     },
     {

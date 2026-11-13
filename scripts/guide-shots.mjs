@@ -15,6 +15,15 @@ const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gestur
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1.5 });
 const page = await ctx.newPage();
 await page.addInitScript(() => { try { localStorage.setItem('sticky.anthropicKey', 'guide-picture'); } catch { /* fine */ } });
+// A stand-in Suno connection so the Suno picture shows the connected layout. Names are clearly examples.
+await page.addInitScript(() => {
+  const mcp = { callTool: async (server, tool) => {
+    if (tool === 'account-usage') return { payload: { allowed_models: ['v6', 'v6-wild'], suno_account: { credits_remaining: 2500 } } };
+    if (tool.startsWith('library')) return { payload: { items: [1, 2].map((n) => ({ id: `ex${n}`, title: `Example song ${n}`, status: 'complete', metadata: { style: 'example style', duration: 150 } })), next_cursor: null } };
+    throw { code: 'tool_error', message: 'example' };
+  } };
+  window.claude = { use: async (name) => (name === 'mcp' ? mcp : null) };
+});
 await page.goto('http://localhost:4319/');
 await page.click('#start');
 await page.waitForSelector('.pads');
@@ -64,6 +73,12 @@ const setups = {
     await page.click('#play'); await page.click('#mix-reset');
     await page.click('#mod-analyze'); await page.selectOption('#an-sample', { index: 0 }); await page.click('#an-run'); await page.waitForSelector('.an-col');
     return { maxH: 640 };
+  },
+  suno: async () => {
+    await page.click('#mod-suno'); await page.waitForSelector('#suno-generate');
+    for (const k of ['era', 'tempo', 'instrument', 'low']) await page.click(`.pillar:has(#pillar-${k}) .chip >> nth=1`);
+    await page.fill('#suno-negative', 'generic EDM drop'); await page.fill('#suno-lyrics', '[Intro]\n\n[Verse]\nExample words\n\n[Chorus]\n');
+    return { maxH: 760 };
   },
   library: async () => {
     await page.click('#mod-studio'); await page.click('#save-sample'); await page.waitForSelector('.toast');

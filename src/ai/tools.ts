@@ -65,6 +65,16 @@ export const TOOLS: Anthropic.Beta.BetaTool[] = [
     }, ['pad', 'notes']),
   },
   {
+    name: 'write_suno_prompt',
+    description: 'Fill in the Suno page for the user: the seven style parts (era, key, tempo, vocal, instrument, low, mix), what to keep out, a title, lyrics with [Section] tags, and instrumental on or off. Only include fields you want to change. Describe sounds, never artist names (Suno removes them). It does not generate anything: the user reviews it and presses Generate.',
+    input_schema: obj({
+      title: { type: 'string', maxLength: 256 },
+      era: { type: 'string', maxLength: 400 }, key: { type: 'string', maxLength: 400 }, tempo: { type: 'string', maxLength: 400 }, vocal: { type: 'string', maxLength: 400 },
+      instrument: { type: 'string', maxLength: 400 }, low: { type: 'string', maxLength: 400 }, mix: { type: 'string', maxLength: 400 },
+      keep_out: { type: 'string', maxLength: 1000 }, lyrics: { type: 'string', maxLength: 5000 }, instrumental: { type: 'boolean' },
+    }),
+  },
+  {
     name: 'edit_pads',
     description: 'Change volume, pitch or reverse on one or more pads. Pitch is in semitones (-12 to 12) and also changes playback speed.',
     input_schema: obj({
@@ -208,6 +218,19 @@ export function runTool(name: string, input: unknown, deps: StudioDeps, group: s
       run('notes.set', { pad, notes: a.keep_existing ? [...p.notes.filter((n) => n.pad === pad), ...made] : made });
       if (a.scale) dispatch('project.setScale', { scale: a.scale });
       return ok('Written.', made.length ? `Wrote ${made.length} notes on pad ${padLabel(pad)}` : `Cleared notes on pad ${padLabel(pad)}`);
+    }
+
+    case 'write_suno_prompt': {
+      const pillars: Record<string, string> = {};
+      for (const k of ['era', 'key', 'tempo', 'vocal', 'instrument', 'low', 'mix']) {
+        if (a[k] === undefined) continue;
+        if (typeof a[k] !== 'string') return fail(`${k} must be text.`);
+        pillars[k] = a[k];
+      }
+      for (const k of ['title', 'keep_out', 'lyrics']) if (a[k] !== undefined && typeof a[k] !== 'string') return fail(`${k} must be text.`);
+      if (a.instrumental !== undefined && typeof a.instrumental !== 'boolean') return fail('instrumental must be true or false.');
+      dispatch('suno.set', { patch: { pillars, title: a.title, negative: a.keep_out, lyrics: a.lyrics, instrumental: a.instrumental, ...(Object.keys(pillars).length ? { styleOverride: null } : {}) } });
+      return ok('Written to the Suno page. Tell the user to open the Suno tab to review it and press Generate.', 'Filled in the Suno page');
     }
 
     case 'edit_pads': {

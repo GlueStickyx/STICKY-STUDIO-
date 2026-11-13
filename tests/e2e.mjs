@@ -177,7 +177,7 @@ try {
   await page.click('#topads');
 
   // Module tabs: tools not built yet say so plainly and lead back to the Sampler.
-  check('a tab exists for every tool', await page.locator('.modules .mod').count() === 9 && await page.locator('.mod .soon').count() === 4);
+  check('a tab exists for every tool', await page.locator('.modules .mod').count() === 9 && await page.locator('.mod .soon').count() === 3);
   await page.click('#mod-stems');
   check('an unbuilt tool says it is not built and what works today', /not built yet/i.test(await page.locator('.planned-card').innerText()) && /what you can do today/i.test(await page.locator('.planned-card').innerText()) && await page.locator('.pads').count() === 0);
   await page.click('text=Back to the Sampler');
@@ -303,6 +303,17 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/analyze.png` });
   await page.click('#mod-studio');
   await page.selectOption('#sample', { label: 'Demo loop' }); // back to the sample the later checks expect
+
+  // Suno on the web build: the builder works without a connection and says where generating works.
+  await page.click('#mod-suno');
+  await page.click('.pillar:has(#pillar-era) .chip >> nth=0');
+  await page.fill('#pillar-tempo', '124 BPM');
+  check('the style is built from the seven parts', (await page.locator('.suno-style').innerText()) === 'late-90s UK garage, 124 BPM');
+  await page.click('#suno-lyrics');
+  await page.click('.chip.tag:has-text("[Chorus]")');
+  check('section tags go on their own line', (await page.inputValue('#suno-lyrics')) === '[Chorus]\n');
+  check('without the connector it explains where generating works', (await page.locator('.suno-side').innerText()).includes('opened in Claude'));
+  await page.click('#mod-studio');
 
   // Guide: every page opens, every picture loads, and every marker has its explanation.
   await page.click('#guide');
@@ -513,7 +524,18 @@ try {
         opts.onText({ text: 'Kick pattern on pad 4.', delta: 'Kick pattern on pad 4.' });
         return { text: 'Kick pattern on pad 4.', truncated: false };
       };
-      window.claude = { use: async (name) => (name === 'sample' ? sample : name === 'downloads'
+      window.__calls = [];
+      const songs = { s1: { id: 's1', title: 'Night bus', status: 'queued' }, s2: { id: 's2', title: 'Night bus', status: 'queued' } };
+      const mcp = { callTool: async (server, tool, input) => {
+        window.__calls.push([server, tool, input]);
+        if (tool === 'account-usage') return { payload: { allowed_models: ['v6', 'v6-wild'], suno_account: { credits_remaining: 1234 } } };
+        if (tool === 'library-list' || tool === 'library-search') return { payload: { items: [{ id: 'lib1', title: 'Example song', status: 'complete', song_url: 'https://suno.com/song/lib1', metadata: { style: 'dusty boom bap, vinyl crackle', duration: 125 } }], next_cursor: null } };
+        if (tool === 'audio-create') return { payload: [songs.s1, songs.s2] };
+        if (tool === 'audio-retrieve') return { payload: { ...songs[input.id], status: 'complete' } };
+        if (tool === 'audio-download') return input.confirm ? { payload: { url: 'https://cdn.example/file.wav' } } : { payload: { status: 'requires_credit' } };
+        throw { code: 'tool_error', message: 'unexpected' };
+      } };
+      window.claude = { use: async (name) => (name === 'mcp' ? mcp : name === 'sample' ? sample : name === 'downloads'
         ? { save: async (r) => { window.__saved.push({ filename: r.filename, bytes: Array.from(new Uint8Array(await r.data.arrayBuffer())) }); return { status: 'saved' }; } } : null) };
     });
     await apage.goto('http://localhost:4317/artifact-test.html');
@@ -537,6 +559,30 @@ try {
     const saved = await apage.evaluate(() => window.__saved[0]);
     fs.writeFileSync('/tmp/sticky-export-test.zip', Buffer.from(saved.bytes));
     check('artifact export hands a zip to the host', saved.filename.endsWith('.zip') && saved.bytes[0] === 0x50 && saved.bytes[1] === 0x4b, saved.filename);
+    // Suno through the connector.
+    await apage.click('#mod-suno');
+    await apage.waitForSelector('#suno-generate');
+    check('Suno page shows credits and the plan models', (await apage.locator('.suno-side').innerText()).includes('1,234 credits') && await apage.locator('#suno-model option').count() === 3);
+    await apage.waitForSelector('.song:has-text("Example song")');
+    await apage.click('.song:has-text("Example song") >> text=Use its style');
+    check('a library song\'s style can be reused', (await apage.inputValue('#style-text')) === 'dusty boom bap, vinyl crackle');
+    await apage.fill('#suno-title', 'Night bus');
+    await apage.fill('#suno-weirdness', '0.3');
+    await apage.click('#suno-generate');
+    check('generate asks before spending credits', (await apage.locator('.confirm').innerText()).includes('spends Suno credits') && !(await apage.evaluate(() => window.__calls.some((c) => c[1] === 'audio-create'))));
+    await apage.click('#suno-confirm');
+    await apage.waitForSelector('.song:has-text("Night bus")');
+    const create = await apage.evaluate(() => window.__calls.find((c) => c[1] === 'audio-create')[2]);
+    check('generate sends the style, title and only the sliders that were set', create.style === 'dusty boom bap, vinyl crackle' && create.title === 'Night bus' && create.controls?.weirdness === 0.3 && !('variety' in (create.controls ?? {})) && create.instrumental === false, JSON.stringify(create));
+    await apage.waitForSelector('.song:has-text("Night bus") >> text=Open in Suno', { timeout: 10000 });
+    check('the queue updates when the songs finish', await apage.locator('.song:has-text("Night bus")').count() === 2);
+    await apage.locator('.song:has-text("Night bus") >> text=Get WAV').first().click();
+    await apage.waitForSelector('text=Uses 1 download credit.');
+    check('a download credit is only spent after the user agrees', !(await apage.evaluate(() => window.__calls.some((c) => c[1] === 'audio-download' && c[2].confirm))));
+    await apage.click('text=Use credit');
+    await apage.waitForSelector('a:has-text("Download WAV")');
+    if (shots) await apage.screenshot({ path: `${shots}/suno.png` });
+    await apage.click('#mod-studio');
     if (shots) await apage.screenshot({ path: `${shots}/artifact.png` });
     await apage.close();
   }

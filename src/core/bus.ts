@@ -1,7 +1,7 @@
 // The command bus. Every change to the project goes through dispatch(): the UI, undo/redo,
 // autosave and (later) the AI assistant all use this one entry point.
 import { emptyMixer, MAX_SONG_BARS, TRACK_COUNT, PITCH_MAX, PITCH_MIN, REVERBS, SCALES, STRETCH_MAX, STRETCH_MIN, BANK_COUNT, BAR_TICKS, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, defaultFx, emptyPad, emptyProject, sliceBounds } from './types';
-import type { Placement, Clip, LoopEvent, Note, Pad, PadFx, Project, Sample } from './types';
+import type { SunoJob, Placement, Clip, LoopEvent, Note, Pad, PadFx, Project, Sample } from './types';
 
 type Handler = (p: Project, args: any) => Project;
 interface CommandDef { run: Handler; undoable: boolean; describe: string }
@@ -159,6 +159,33 @@ export const commands: Record<string, CommandDef> = {
   },
   'mix.master': { undoable: true, describe: 'Set the master volume 0-1.5', run: (p, a) => ({ ...p, mixer: { ...p.mixer, master: typeof a.vol === 'number' ? clamp(a.vol, 0, 1.5) : p.mixer.master } }) },
   'mix.reset': { undoable: true, describe: 'Put every mixer channel back to its starting position', run: (p) => ({ ...p, mixer: emptyMixer() }) },
+  'suno.set': {
+    undoable: false, describe: 'Change the Suno draft: title, pillars (merged), styleOverride, negative, lyrics, instrumental, model, vocalGender, weirdness, styleInfluence, variety',
+    run: (p, a) => {
+      const d = p.suno, n = a.patch ?? {};
+      const str = (v: unknown, max: number, cur: string) => (typeof v === 'string' ? v.slice(0, max) : cur);
+      const unit = (v: unknown, cur: number | null) => (v === null ? null : typeof v === 'number' && Number.isFinite(v) ? clamp(v, 0, 1) : cur);
+      const pillars = { ...d.pillars };
+      if (n.pillars && typeof n.pillars === 'object') for (const k of Object.keys(pillars) as (keyof typeof pillars)[]) pillars[k] = str(n.pillars[k], 400, pillars[k]);
+      return { ...p, suno: { ...d, pillars,
+        title: str(n.title, 256, d.title), negative: str(n.negative, 1000, d.negative), lyrics: str(n.lyrics, 5000, d.lyrics),
+        styleOverride: n.styleOverride === null ? null : typeof n.styleOverride === 'string' ? n.styleOverride.slice(0, 1000) : d.styleOverride,
+        instrumental: typeof n.instrumental === 'boolean' ? n.instrumental : d.instrumental,
+        model: str(n.model, 40, d.model), vocalGender: ['', 'male', 'female'].includes(n.vocalGender) ? n.vocalGender : d.vocalGender,
+        weirdness: unit(n.weirdness, d.weirdness), styleInfluence: unit(n.styleInfluence, d.styleInfluence),
+        variety: n.variety === null ? null : Number.isInteger(n.variety) ? clamp(n.variety, 0, 4) : d.variety,
+      } };
+    },
+  },
+  'suno.jobs': {
+    undoable: false, describe: 'Add or update Suno generation jobs in the queue (newest first, 20 kept)',
+    run: (p, a) => {
+      let jobs = [...p.suno.jobs];
+      for (const j of a.jobs as SunoJob[]) { const i = jobs.findIndex((x) => x.id === j.id); if (i >= 0) jobs[i] = { ...jobs[i], ...j }; else jobs.unshift(j); }
+      if (a.remove) jobs = jobs.filter((j) => j.id !== a.remove);
+      return { ...p, suno: { ...p.suno, jobs: jobs.slice(0, 20) } };
+    },
+  },
   'track.set': {
     undoable: false, describe: 'Set a clip track\'s volume (0-1.5), mute or solo',
     run: (p, a) => ({ ...p, tracks: p.tracks.map((t, i) => (i === a.track ? { vol: typeof a.vol === 'number' ? clamp(a.vol, 0, 1.5) : t.vol, mute: a.mute ?? t.mute, solo: a.solo ?? t.solo } : t)) }),
@@ -232,7 +259,7 @@ export function dispatch(name: string, args: any = {}, opts: { group?: string; s
 /** Settings that are not undoable stay as they are when history moves. */
 function keepSettings(target: Project): Project {
   const active = target.samples.some((s) => s.id === state.activeSampleId) ? state.activeSampleId : target.activeSampleId;
-  return { ...target, selectedPad: state.selectedPad, metronome: state.metronome, quantize: state.quantize, activeSampleId: active, scale: state.scale, root: state.root, tracks: state.tracks };
+  return { ...target, selectedPad: state.selectedPad, metronome: state.metronome, quantize: state.quantize, activeSampleId: active, scale: state.scale, root: state.root, tracks: state.tracks, suno: state.suno };
 }
 export function undo() { const prev = past.pop(); if (!prev) return; future.push(state); state = keepSettings(prev); lastKey = ''; emit(); }
 export function redo() { const next = future.pop(); if (!next) return; past.push(state); state = keepSettings(next); lastKey = ''; emit(); }

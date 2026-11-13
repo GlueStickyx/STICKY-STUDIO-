@@ -96,7 +96,14 @@ Analyze (`src/ui/Analyze.tsx`, `src/audio/trackanalysis.ts`): suggested loops (b
 hits (labelled by tone) and voice-like lines (steady pitch 90-900 Hz; no AI model, so a lead synth can match).
 A real vocal finder would need a downloadable model: ask the owner before adding one (rule 7).
 
-Next, in the order shown on the module tabs: Stems → Suno workstation → AI setup (Gemini/GPT/local keys, knowledge shelf, research mode) → Plugins (desktop).
+Suno (`src/ui/Suno.tsx`): 7-part style builder, negative, lyrics with tags (works everywhere); in the artifact,
+generate/queue/library/download links/upload hand-off through the Suno connector (`mcp` capability, server "Suno";
+the artifact must be published with that capability). The page cannot fetch Suno audio (CSP): download then Import.
+The audio-create result shape was not observed live (a real call spends credits); Suno.tsx accepts an array,
+{clips} or {items}. The assistant can fill the draft (`write_suno_prompt`) but never generates.
+Stems skipped by the owner for now.
+
+Next, in the order shown on the module tabs: AI setup (Gemini/GPT/local keys, knowledge shelf, research mode) → Plugins (desktop).
 Alongside: co-pilot mode (explained steps, point-and-ask, starter kit), sample "recipes", sampler extras
 (attack/decay, choke groups, velocity, 8/16-bar loops, 32 steps, probability, pattern chains, chords,
 arpeggiator), library sidebar, Suno URL field, downloadable project file, mic sampling (web build only).
