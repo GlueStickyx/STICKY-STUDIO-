@@ -156,6 +156,13 @@ export async function exportLoopWav(): Promise<string> {
   return saveFile(fileStem('loop'), 'wav', encodeWav(await engine.renderLoop(44100), 44100), 'audio/wav', 'Loop');
 }
 
+/** Render the whole arrangement and hand it to the user. */
+export async function exportSong(): Promise<string> {
+  const ch = await engine.renderSong(44100);
+  if (!ch) return 'The timeline is empty. Place some clips first.';
+  return saveFile(`sticky-song-${Math.round(getProject().bpm)}bpm`, 'wav', encodeWav(ch, 44100), 'audio/wav', 'Song');
+}
+
 /** Save the loop's patterns, recorded hits and piano-roll notes as a MIDI file. */
 export async function exportMidi(): Promise<string> {
   const bytes = projectToMidi(getProject());

@@ -47,8 +47,16 @@ const setups = {
     await page.locator('.clip').nth(0).click(); await page.waitForSelector('.clip.playing'); await page.waitForTimeout(300);
     return { maxH: 420 };
   },
+  arrange: async () => {
+    await page.click('#play'); await page.click('#mod-arrange');
+    const lane = (t) => page.locator(`.tl-track[data-track="${t}"]`);
+    await lane(0).click({ position: { x: 10, y: 20 } }); await page.click('#arr-more');
+    await page.locator('.brush').nth(2).click(); await lane(1).click({ position: { x: 48 * 2 + 10, y: 20 } }); await page.click('#arr-more'); await page.click('#arr-more');
+    await page.locator('.brush').nth(1).click(); await lane(0).click({ position: { x: 48 * 4 + 10, y: 20 } });
+    return { maxH: 430 };
+  },
   library: async () => {
-    await page.click('#play'); await page.click('#mod-studio'); await page.click('#save-sample'); await page.waitForSelector('.toast');
+    await page.click('#mod-studio'); await page.click('#save-sample'); await page.waitForSelector('.toast');
     await page.click('.tab:has-text("Pad")'); await page.click('#save-pad'); await page.waitForTimeout(400);
     await page.click('#library'); await page.click('#lib-save-loop'); await page.waitForFunction(() => document.querySelectorAll('.lib-row').length === 3);
     await page.click('.lib-row >> nth=1 >> text=Rename / tag'); await page.fill('.lib-edit input[name="name"]', 'Kick A1'); await page.fill('.lib-edit input[name="tags"]', 'kick, one-shot');

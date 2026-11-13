@@ -176,8 +176,8 @@ try {
   await page.click('#topads');
 
   // Module tabs: tools not built yet say so plainly and lead back to the Sampler.
-  check('a tab exists for every tool', await page.locator('.modules .mod').count() === 9 && await page.locator('.mod .soon').count() === 7);
-  await page.click('#mod-arrange');
+  check('a tab exists for every tool', await page.locator('.modules .mod').count() === 9 && await page.locator('.mod .soon').count() === 6);
+  await page.click('#mod-mixer');
   check('an unbuilt tool says it is not built and what works today', /not built yet/i.test(await page.locator('.planned-card').innerText()) && /what you can do today/i.test(await page.locator('.planned-card').innerText()) && await page.locator('.pads').count() === 0);
   await page.click('text=Back to the Sampler');
   check('back returns to the working studio', await page.locator('.pad.loaded').count() === 16);
@@ -208,10 +208,37 @@ try {
   check('stopping a track ends its clip on the bar line and leaves the other playing', true);
   if (shots) await page.screenshot({ path: `${shots}/clips.png` });
   await page.click('#play');
+  // Arrange: lay the two clips out as a song and export it.
+  await page.click('#mod-arrange');
+  const lane = (t) => page.locator(`.tl-track[data-track="${t}"]`);
+  await lane(0).click({ position: { x: 48 * 0 + 10, y: 20 } }); // Clip 1 (2 bars) at bar 1
+  check('tapping the timeline places the chosen clip', await page.locator('.tl-block').count() === 1);
+  await page.click('#arr-more');
+  check('repeat doubles the block', (await page.locator('.arr-sel .meta').first().innerText()).includes('bars 1–4'));
+  await page.locator('.brush').nth(1).click();
+  await lane(3).click({ position: { x: 48 * 4 + 10, y: 20 } }); // Clip 2 lives on track 2; tapping any row places it there at bar 5
+  check('a clip always lands on its own track', await lane(1).locator('.tl-block').count() === 1 && await page.locator('.tl-block').count() === 2);
+  await lane(1).click({ position: { x: 48 * 6 + 10, y: 20 } });
+  await page.locator('.brush').nth(0).click();
+  await lane(0).click({ position: { x: 48 * 2 + 10, y: 60 } }).catch(() => {});
+  check('song length follows the last block', (await page.locator('.arrange .group.end .meta').innerText()).startsWith('8 bars'), await page.locator('.arrange .group.end .meta').innerText());
+  const [songDl] = await Promise.all([page.waitForEvent('download'), page.click('#export-song')]);
+  const song = await wavStats(songDl);
+  const secs = (song.bytes - 44) / 4 / song.rate;
+  // 8 bars at 100 BPM = 19.2 s, plus a 3 s tail. Bars 1-4 hold clip 1 (the starter beat); bars 5-6 clip 2; bars 7-8 clip 2 again.
+  check('exported song is the right length', Math.abs(secs - 22.2) < 0.05, `${secs.toFixed(2)} s`);
+  check('the song has sound in its blocks and silence in the tail', song.rms(0, 9.6) > 0.02 && song.rms(9.6, 19.2) > 0.001 && song.rms(21, 22.2) < 0.0005, `${song.rms(0, 9.6).toFixed(4)} / ${song.rms(9.6, 19.2).toFixed(4)} / ${song.rms(21, 22.2).toFixed(5)}`);
+  check('the two halves differ, because different clips play', Math.abs(song.rms(0, 9.6) - song.rms(9.6, 19.2)) > 0.005);
+  await page.click('#play');
+  await page.waitForFunction(() => /\d+\.\d/.test(document.querySelector('.pos').textContent), null, { timeout: 3000 });
+  check('play runs the song', true);
+  await page.click('#play');
+  if (shots) await page.screenshot({ path: `${shots}/arrange.png` });
+  await page.click('#mod-clips');
   await page.click('[aria-label^="Options for Clip 1"]');
   await page.click('text=Edit in Sampler');
   check('edit in Sampler returns to the pads with the clip loaded', await page.locator('.pad.loaded').count() === 16 && await page.locator('.clips').count() === 0);
-  for (let i = 0; i < 4; i++) await page.click('#undo'); // the clip load, two saves and one step: back to where this block began
+  for (let i = 0; i < 8; i++) await page.click('#undo'); // clip load, three placements (the overlapping one was refused), one repeat, two saves, one step: back to where this block began
   await page.dispatchEvent('#pad-0', 'pointerdown');
 
   // Guide: every page opens, every picture loads, and every marker has its explanation.

@@ -15,6 +15,7 @@ import { MODULES } from './modules';
 import { PianoRoll } from './PianoRoll';
 import { padHue } from './colors';
 import { inArtifact } from '../ai/viewer';
+import { Arrange } from './Arrange';
 import { Chat } from './Chat';
 import { Clips } from './Clips';
 import { Waveform } from './Waveform';
@@ -60,7 +61,7 @@ function Studio() {
   const [msg, setMsg] = useState<string | null>(null);
   const [chat, setChat] = useState(false);
   const [module, setModule] = useState('studio');
-  useEffect(() => { engine.setMode(module === 'clips' ? 'clips' : 'loop'); }, [module]); // the Clips page plays clips; everywhere else plays the Sampler loop
+  useEffect(() => { engine.setMode(module === 'clips' ? 'clips' : module === 'arrange' ? 'song' : 'loop'); }, [module]); // the Clips page plays clips; everywhere else plays the Sampler loop
   const [sheet, setSheet] = useState<'library' | 'guide' | null>(null);
   const [view, setView] = useState<'chop' | 'roll'>('chop');
   const [noteLen, setNoteLen] = useState(STEP_TICKS * 2);
@@ -90,7 +91,7 @@ function Studio() {
           </button>
         ))}
       </nav>
-      {module === 'clips' ? <Clips p={p} say={setMsg} toSampler={() => setModule('studio')} /> : module !== 'studio' ? <Planned id={module} back={() => setModule('studio')} /> : (
+      {module === 'arrange' ? <Arrange p={p} say={setMsg} /> : module === 'clips' ? <Clips p={p} say={setMsg} toSampler={() => setModule('studio')} /> : module !== 'studio' ? <Planned id={module} back={() => setModule('studio')} /> : (
         <>
       <section className="chop">
         {view === 'chop' ? (
@@ -141,7 +142,7 @@ function Transport({ p, say, chat, toggleChat, openSheet }: { p: Project; say: (
       <div className="group">
         <button id="play" className={engine.playing ? 'btn icon on' : 'btn icon'} aria-label={engine.playing ? 'Stop' : 'Play'}
           onClick={() => (engine.playing ? engine.stop() : engine.play())}>{engine.playing ? '■' : '▶'}</button>
-        <button id="rec" disabled={engine.mode === 'clips'} title={engine.mode === 'clips' ? 'Recording writes into the Sampler loop. Go to the Sampler to record.' : undefined} className={engine.recording ? 'btn icon rec on' : 'btn icon rec'} aria-label="Record pad hits" aria-pressed={engine.recording}
+        <button id="rec" disabled={engine.mode !== 'loop'} title={engine.mode !== 'loop' ? 'Recording writes into the Sampler loop. Go to the Sampler to record.' : undefined} className={engine.recording ? 'btn icon rec on' : 'btn icon rec'} aria-label="Record pad hits" aria-pressed={engine.recording}
           onClick={() => engine.toggleRecord()}>●</button>
         <button id="metro" className={p.metronome ? 'btn on' : 'btn'} aria-pressed={p.metronome}
           onClick={() => dispatch('project.setMetronome', { on: !p.metronome })}>Click</button>

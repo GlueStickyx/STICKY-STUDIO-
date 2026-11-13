@@ -1,9 +1,9 @@
 // The audio engine. It reads the project from the command bus and never mutates it directly:
 // recording a hit dispatches 'loop.addEvent' like any other change.
 import { dispatch, getProject, subscribe } from '../core/bus';
-import { beatsInWindow, hitsInWindow, loopTicks, nextBar, quantizeTick, secondsPerTick, segmentHits } from '../core/sequence';
+import { beatsInWindow, hitsInWindow, loopTicks, nextBar, quantizeTick, secondsPerTick, segmentHits, arrangementSegments, songBars } from '../core/sequence';
 import type { Hit, Segment } from '../core/sequence';
-import { DELAY_TIMES, REVERBS, TOTAL_PADS, defaultFx, isGranular, uid } from '../core/types';
+import { BAR_TICKS, DELAY_TIMES, REVERBS, TOTAL_PADS, defaultFx, isGranular, uid } from '../core/types';
 import type { Pad, Project, ReverbSize } from '../core/types';
 import { computePeaks, mixToMono } from './analysis';
 
@@ -244,7 +244,9 @@ export class Engine {
   private suppress = new Map<string, number>(); // event id -> absolute tick already heard live
   private takeId = '';
   /** What the transport plays: the Sampler loop, or the clips launched on the Clips page. */
-  mode: 'loop' | 'clips' = 'loop';
+  mode: 'loop' | 'clips' | 'song' = 'loop';
+  /** In song mode: the bar playback starts from. */
+  songStart = 0;
   private segments: Segment[] = [];
 
   /** UI hook: a pad will sound `delaySec` from now. */
@@ -302,6 +304,7 @@ export class Engine {
   /** Current position inside the loop in ticks, or 0 when stopped. */
   position(): number {
     if (!this.playing || !this.ctx) return 0;
+    if (this.mode === 'song') return Math.max(0, this.tickAt(this.ctx.currentTime)) + this.songStart * BAR_TICKS; // position in the whole song
     const t = this.tickAt(this.ctx.currentTime);
     return t < 0 ? 0 : t % loopTicks(getProject());
   }
@@ -334,7 +337,7 @@ export class Engine {
   }
 
   /** Switch between playing the Sampler loop and playing launched clips. Stops playback, so nothing doubles up. */
-  setMode(mode: 'loop' | 'clips') {
+  setMode(mode: 'loop' | 'clips' | 'song') {
     if (mode === this.mode) return;
     this.stop();
     this.mode = mode;
@@ -385,7 +388,11 @@ export class Engine {
     if (horizon <= this.scheduledUntil) return;
     const from = this.scheduledUntil, to = horizon;
     if (this.mode === 'clips') this.segments = this.segments.filter((s) => s.end > from); // forget clips that have finished
-    const hits = this.mode === 'clips' ? segmentHits(p, this.segments, from, to) : hitsInWindow(p, from, to);
+    const songEnd = (songBars(p) - this.songStart) * BAR_TICKS;
+    if (this.mode === 'song' && this.tickAt(now) >= songEnd) { this.stop(); return; } // the song has finished
+    const hits = this.mode === 'clips' ? segmentHits(p, this.segments, from, to)
+      : this.mode === 'song' ? segmentHits(p, arrangementSegments(p, this.songStart), from, Math.min(to, songEnd))
+      : hitsInWindow(p, from, to);
     scheduleHits(this.mixer, p, hits, this.timeAt, this.buffers, this.reversed, (pad, time, v, id, abs, isNote) => {
       if (v === null && id !== undefined) { // pre-check: skip a hit the player just performed live
         if (this.suppress.get(id) === abs) { this.suppress.delete(id); return false; }
@@ -512,6 +519,23 @@ export class Engine {
     });
     const out = await off.startRendering();
     return [out.getChannelData(0).slice(frames, frames * 2), out.getChannelData(1).slice(frames, frames * 2)];
+  }
+
+  /** Render the whole arrangement to stereo sample data, with a short tail for echoes and reverb to ring out. */
+  async renderSong(sampleRate = 44100): Promise<Float32Array[] | null> {
+    const p = getProject();
+    const bars = songBars(p);
+    if (!bars) return null;
+    const spt = secondsPerTick(p.bpm);
+    const end = bars * BAR_TICKS;
+    const { off, mixer, rev } = this.offline(end * spt + 3, sampleRate);
+    const voices: (Voice | null)[] = new Array(TOTAL_PADS).fill(null);
+    scheduleHits(mixer, p, segmentHits(p, arrangementSegments(p), 0, end), (t) => t * spt, this.buffers, rev, (pad, time, v, _id, _abs, isNote) => {
+      if (v && !isNote) { voices[pad]?.stop(time); voices[pad] = v; }
+      return true;
+    });
+    const out = await off.startRendering();
+    return [out.getChannelData(0), out.getChannelData(1)];
   }
 
   /** Render one pad hit with its pitch, reverse and effects (and the echo tail) to stereo sample data. */

@@ -1,7 +1,7 @@
 // The command bus. Every change to the project goes through dispatch(): the UI, undo/redo,
 // autosave and (later) the AI assistant all use this one entry point.
-import { TRACK_COUNT, PITCH_MAX, PITCH_MIN, REVERBS, SCALES, STRETCH_MAX, STRETCH_MIN, BANK_COUNT, BAR_TICKS, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, defaultFx, emptyPad, emptyProject, sliceBounds } from './types';
-import type { Clip, LoopEvent, Note, Pad, PadFx, Project, Sample } from './types';
+import { MAX_SONG_BARS, TRACK_COUNT, PITCH_MAX, PITCH_MIN, REVERBS, SCALES, STRETCH_MAX, STRETCH_MIN, BANK_COUNT, BAR_TICKS, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, defaultFx, emptyPad, emptyProject, sliceBounds } from './types';
+import type { Placement, Clip, LoopEvent, Note, Pad, PadFx, Project, Sample } from './types';
 
 type Handler = (p: Project, args: any) => Project;
 interface CommandDef { run: Handler; undoable: boolean; describe: string }
@@ -132,7 +132,7 @@ export const commands: Record<string, CommandDef> = {
     },
   },
   'clip.rename': { undoable: true, describe: 'Rename a clip', run: (p, a) => ({ ...p, clips: p.clips.map((c) => (c.id === a.id ? { ...c, name: String(a.name).trim().slice(0, 40) || c.name } : c)) }) },
-  'clip.remove': { undoable: true, describe: 'Delete a clip', run: (p, a) => (p.clips.some((c) => c.id === a.id) ? { ...p, clips: p.clips.filter((c) => c.id !== a.id) } : p) },
+  'clip.remove': { undoable: true, describe: 'Delete a clip', run: (p, a) => (p.clips.some((c) => c.id === a.id) ? { ...p, clips: p.clips.filter((c) => c.id !== a.id), arrangement: p.arrangement.filter((pl) => pl.clipId !== a.id) } : p) },
   'clip.loadToLoop': {
     undoable: true, describe: 'Put a clip back into the Sampler loop for editing (replaces the loop\'s steps, recorded hits and notes)',
     run: (p, a) => {
@@ -141,6 +141,11 @@ export const commands: Record<string, CommandDef> = {
       return { ...p, bars: c.bars as Project['bars'], events: [...c.events], notes: [...c.notes], pads: p.pads.map((pad, i) => ({ ...pad, steps: c.steps[i] ? [...c.steps[i]] : new Array(STEP_COUNT).fill(0) })) };
     },
   },
+  'arr.place': { undoable: true, describe: 'Place a clip on the song timeline at a bar (0 = first bar). Refused if it would overlap another clip on the same track', run: (p, a) => fitPlacement(p, { id: String(a.id), clipId: a.clipId, bar: a.bar, repeats: a.repeats ?? 1 }) },
+  'arr.move': { undoable: true, describe: 'Move a placed clip to another bar', run: (p, a) => { const pl = p.arrangement.find((x) => x.id === a.id); return pl ? fitPlacement(p, { ...pl, bar: a.bar }) : p; } },
+  'arr.setRepeats': { undoable: true, describe: 'Set how many times a placed clip repeats', run: (p, a) => { const pl = p.arrangement.find((x) => x.id === a.id); return pl ? fitPlacement(p, { ...pl, repeats: a.repeats }) : p; } },
+  'arr.remove': { undoable: true, describe: 'Take a clip off the song timeline', run: (p, a) => (p.arrangement.some((x) => x.id === a.id) ? { ...p, arrangement: p.arrangement.filter((x) => x.id !== a.id) } : p) },
+  'arr.clear': { undoable: true, describe: 'Empty the song timeline', run: (p) => (p.arrangement.length ? { ...p, arrangement: [] } : p) },
   'track.set': {
     undoable: false, describe: 'Set a clip track\'s volume (0-1.5), mute or solo',
     run: (p, a) => ({ ...p, tracks: p.tracks.map((t, i) => (i === a.track ? { vol: typeof a.vol === 'number' ? clamp(a.vol, 0, 1.5) : t.vol, mute: a.mute ?? t.mute, solo: a.solo ?? t.solo } : t)) }),
@@ -149,6 +154,21 @@ export const commands: Record<string, CommandDef> = {
   'loop.clearPad': { undoable: true, describe: 'Erase recorded hits of one pad', run: (p, a) => ({ ...p, events: p.events.filter((e) => e.pad !== a.pad) }) },
   'loop.clear': { undoable: true, describe: 'Erase all recorded hits', run: (p) => ({ ...p, events: [] }) },
 };
+
+/** Add or replace a placement if it is valid and does not overlap another clip on the same track; otherwise change nothing. */
+function fitPlacement(p: Project, pl: Placement): Project {
+  const clip = p.clips.find((c) => c.id === pl.clipId);
+  if (!clip || !Number.isInteger(pl.bar) || !Number.isInteger(pl.repeats) || pl.bar < 0 || pl.repeats < 1) return p;
+  const end = pl.bar + clip.bars * pl.repeats;
+  if (end > MAX_SONG_BARS) return p;
+  const clash = p.arrangement.some((o) => {
+    if (o.id === pl.id) return false;
+    const oc = p.clips.find((c) => c.id === o.clipId);
+    return !!oc && oc.track === clip.track && pl.bar < o.bar + oc.bars * o.repeats && o.bar < end;
+  });
+  if (clash) return p;
+  return { ...p, arrangement: [...p.arrangement.filter((o) => o.id !== pl.id), pl] };
+}
 
 /** Validate a note against the loop: inside the loop, in pitch range, at least one tick long. */
 function cleanNote(n: Note, loop: number): Note | null {

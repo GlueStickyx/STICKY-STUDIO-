@@ -2,7 +2,7 @@
 // so what you hear is what you render.
 import { BAR_TICKS, PPQ, STEP_COUNT, STEP_TICKS } from './types';
 import { trackGain } from './types';
-import type { Clip, LoopEvent, Note, Project } from './types';
+import type { Clip, LoopEvent, Note, Placement, Project } from './types';
 
 export interface Hit { abs: number; pad: number; vel: number; id?: string; /** Set for piano-roll notes: semitone offset and length in ticks. */ pitch?: number; len?: number }
 
@@ -61,6 +61,22 @@ export function segmentHits(p: Project, segments: Segment[], from: number, to: n
     if (clip) out.push(...patternHits(p, clipPattern(clip), from, to, seg.start, seg.end, trackGain(p.tracks, seg.track)));
   }
   return out.sort((a, b) => a.abs - b.abs);
+}
+/** A placement with its clip looked up: which track it is on and the bars it covers [bar, end). */
+export function placementSpan(p: Project, pl: Placement): { track: number; bar: number; end: number } | null {
+  const clip = p.clips.find((c) => c.id === pl.clipId);
+  return clip ? { track: clip.track, bar: pl.bar, end: pl.bar + clip.bars * pl.repeats } : null;
+}
+/** Length of the song in bars: where the last placed clip ends. */
+export const songBars = (p: Project) => p.arrangement.reduce((m, pl) => Math.max(m, placementSpan(p, pl)?.end ?? 0), 0);
+/** The arrangement as segments. `startBar` shifts time so that bar becomes tick 0 (playing from the middle of the song). */
+export function arrangementSegments(p: Project, startBar = 0): Segment[] {
+  const out: Segment[] = [];
+  for (const pl of p.arrangement) {
+    const s = placementSpan(p, pl);
+    if (s) out.push({ track: s.track, clipId: pl.clipId, start: (s.bar - startBar) * BAR_TICKS, end: (s.end - startBar) * BAR_TICKS });
+  }
+  return out;
 }
 /** The next bar line at or after a tick. */
 export const nextBar = (tick: number) => Math.max(0, Math.ceil(Math.max(0, tick) / BAR_TICKS - 1e-9)) * BAR_TICKS + 0;

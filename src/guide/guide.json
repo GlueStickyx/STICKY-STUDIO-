@@ -97,7 +97,7 @@
         {
           "sel": "#mod-arrange",
           "name": "Arrange",
-          "text": "Planned: lay clips along a timeline to build a full song."
+          "text": "Lay clips along a timeline to build a full song, then export it."
         },
         {
           "sel": "#mod-mixer",
@@ -474,6 +474,62 @@
       ]
     },
     {
+      "id": "arrange",
+      "title": "Arrange",
+      "clip": ".arrange",
+      "intro": "Turn clips into a song. Each row is one of the four clip tracks and each column is a bar. While this page is open, Play runs the song from the chosen bar and stops at the end.",
+      "marks": [
+        {
+          "sel": ".brush",
+          "name": "Clip to place",
+          "text": "Every clip you have saved. Tap one to choose it. The label shows its track and length."
+        },
+        {
+          "sel": ".tl-bar",
+          "name": "Bar numbers",
+          "text": "Tap a bar number to choose where Play starts. The yellow number is the start bar."
+        },
+        {
+          "sel": ".tl-track",
+          "name": "A track row",
+          "text": "Tap an empty bar to place the chosen clip there. A clip always lands on its own track, and two clips cannot overlap on one track."
+        },
+        {
+          "sel": ".tl-block",
+          "name": "A placed clip",
+          "text": "Tap it to select it. The thin lines inside show where the clip repeats."
+        },
+        {
+          "sel": "#arr-left",
+          "name": "Move",
+          "text": "Slides the selected clip one bar earlier or later."
+        },
+        {
+          "sel": "#arr-more",
+          "name": "Repeat",
+          "text": "Makes the selected clip play more or fewer times in a row."
+        },
+        {
+          "sel": "#arr-remove",
+          "name": "Remove",
+          "text": "Takes the selected clip off the timeline. The clip itself stays on the Clips page."
+        },
+        {
+          "sel": "#arr-clear",
+          "name": "Clear timeline",
+          "text": "Removes everything from the timeline. Undo brings it back."
+        },
+        {
+          "sel": "#export-song",
+          "name": "Export song",
+          "text": "Renders the whole song to an audio file, with a few seconds at the end for echoes and reverb to fade. The length beside it is the song so far."
+        }
+      ],
+      "notes": [
+        "Track volume, mute and solo are set on the Clips page and apply here too."
+      ]
+    },
+    {
       "id": "library",
       "title": "Library: sounds",
       "clip": ".sheet",
@@ -633,7 +689,8 @@
         "Open Clips and tap Save Sampler loop here on Track 1.",
         "Go back to the Sampler, clear the drums, and make a bassline or melody.",
         "Open Clips and save it on Track 2.",
-        "Tap a clip on each track. They start together on the next bar. Swap clips to move between sections."
+        "Open Arrange. Tap a clip at the top, then tap bars on the timeline to place it. Use + Repeat to make sections longer.",
+        "Press Play to hear the song, then Export song."
       ]
     },
     {
@@ -669,6 +726,7 @@
       "title": "Save and share your work",
       "steps": [
         "Tap Export in the top bar for an audio file of the loop.",
+        "For a full song, open Arrange and tap Export song.",
         "In Piano roll view, tap Export MIDI for the notes and patterns.",
         "Open the Library, go to Projects, type a name and tap Save project to keep the whole session."
       ]
