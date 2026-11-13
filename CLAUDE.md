@@ -81,7 +81,11 @@ when a control is added, renamed or removed** — the script warns about markers
 
 Workstation shell: module tabs (`src/ui/modules.ts`) and the skeuomorphic skin (end of `styles.css`).
 
-Next, in the order shown on the module tabs: Clips → Arrange → Mixer → Analyze (auto cuts incl. vocals) →
+Clips (`src/ui/Clips.tsx`): saved loops on 4 tracks, launched on bar lines (`segmentHits` in sequence.ts,
+`engine.launch`); the transport plays clips on the Clips page and the Sampler loop elsewhere (`engine.setMode`).
+Clips store patterns only; they play the pads' current sounds and effects.
+
+Next, in the order shown on the module tabs: Arrange → Mixer → Analyze (auto cuts incl. vocals) →
 Stems → Suno workstation → AI setup (Gemini/GPT/local keys, knowledge shelf, research mode) → Plugins (desktop).
 Alongside: co-pilot mode (explained steps, point-and-ask, starter kit), sample "recipes", sampler extras
 (attack/decay, choke groups, velocity, 8/16-bar loops, 32 steps, probability, pattern chains, chords,

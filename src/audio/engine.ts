@@ -1,7 +1,8 @@
 // The audio engine. It reads the project from the command bus and never mutates it directly:
 // recording a hit dispatches 'loop.addEvent' like any other change.
 import { dispatch, getProject, subscribe } from '../core/bus';
-import { beatsInWindow, hitsInWindow, loopTicks, quantizeTick, secondsPerTick } from '../core/sequence';
+import { beatsInWindow, hitsInWindow, loopTicks, nextBar, quantizeTick, secondsPerTick, segmentHits } from '../core/sequence';
+import type { Hit, Segment } from '../core/sequence';
 import { DELAY_TIMES, REVERBS, TOTAL_PADS, defaultFx, isGranular, uid } from '../core/types';
 import type { Pad, Project, ReverbSize } from '../core/types';
 import { computePeaks, mixToMono } from './analysis';
@@ -206,10 +207,10 @@ function click(ctx: Ctx, dest: AudioNode, time: number, down: boolean) {
 }
 
 /** Schedule every hit in [fromTick, toTick) onto a mixer. tickTime converts an absolute tick to context time. */
-function scheduleHits(mixer: Mixer, p: Project, from: number, to: number, tickTime: (t: number) => number,
+function scheduleHits(mixer: Mixer, p: Project, hits: Hit[], tickTime: (t: number) => number,
   buffers: Map<string, AudioBuffer>, reversed: (id: string) => AudioBuffer | null,
   onHit?: (pad: number, time: number, v: Voice | null, id?: string, abs?: number, isNote?: boolean) => boolean | void) {
-  for (const h of hitsInWindow(p, from, to)) {
+  for (const h of hits) {
     const pad = p.pads[h.pad];
     const buf = pad.sampleId ? buffers.get(pad.sampleId) : undefined;
     if (!buf) continue;
@@ -242,6 +243,10 @@ export class Engine {
   private timer: number | null = null;
   private suppress = new Map<string, number>(); // event id -> absolute tick already heard live
   private takeId = '';
+  /** What the transport plays: the Sampler loop, or the clips launched on the Clips page. */
+  mode: 'loop' | 'clips' = 'loop';
+  private segments: Segment[] = [];
+
   /** UI hook: a pad will sound `delaySec` from now. */
   onPadFire: (pad: number, delaySec: number) => void = () => {};
   onTransport: () => void = () => {};
@@ -301,8 +306,9 @@ export class Engine {
     return t < 0 ? 0 : t % loopTicks(getProject());
   }
 
-  play() {
+  play(keepSegments = false) {
     if (!this.ctx || this.playing) return;
+    if (this.mode === 'clips' && !keepSegments) this.segments = this.segments.filter((s) => s.end === Infinity).map((s) => ({ ...s, start: 0 })); // restart what was playing
     this.playing = true;
     this.anchorBpm = getProject().bpm;
     this.anchorTime = this.ctx.currentTime + 0.06;
@@ -327,8 +333,41 @@ export class Engine {
     this.onTransport();
   }
 
+  /** Switch between playing the Sampler loop and playing launched clips. Stops playback, so nothing doubles up. */
+  setMode(mode: 'loop' | 'clips') {
+    if (mode === this.mode) return;
+    this.stop();
+    this.mode = mode;
+    this.segments = [];
+  }
+
+  /**
+   * Launch a clip on its track at the next bar line (at once if the transport is stopped), replacing
+   * whatever that track was playing. Pass null to stop the track at the next bar line.
+   */
+  launch(track: number, clipId: string | null) {
+    if (!this.ctx || this.mode !== 'clips') return;
+    if (!this.playing) { this.segments = this.segments.filter((s) => s.track !== track); if (!clipId) return; this.segments.push({ track, clipId, start: 0, end: Infinity }); this.play(true); return; }
+    const at = Math.max(nextBar(this.tickAt(this.ctx.currentTime)), nextBar(this.scheduledUntil));
+    // Drop anything queued later on this track, and end what is playing at the bar line.
+    this.segments = this.segments.filter((s) => s.track !== track || s.start < at).map((s) => (s.track === track && s.end > at ? { ...s, end: at } : s));
+    if (clipId) this.segments.push({ track, clipId, start: at, end: Infinity });
+    this.onTransport();
+  }
+
+  /** For the Clips page: which clip each track is playing now and which is waiting for the bar line ('' = a stop is waiting). */
+  clipState(): { playing: (string | null)[]; queued: (string | null)[] } {
+    const now = this.playing && this.ctx ? this.tickAt(this.ctx.currentTime) : -1;
+    const playing: (string | null)[] = [null, null, null, null], queued: (string | null)[] = [null, null, null, null];
+    for (const s of this.segments) {
+      if (now >= s.start && now < s.end) { playing[s.track] = s.clipId; if (s.end !== Infinity && !this.segments.some((n) => n.track === s.track && n.start === s.end)) queued[s.track] = ''; }
+      else if (s.start > now) queued[s.track] = s.clipId;
+    }
+    return { playing, queued };
+  }
+
   toggleRecord() {
-    if (!this.ctx) return;
+    if (!this.ctx || this.mode !== 'loop') return; // recording writes into the Sampler loop
     this.recording = !this.recording;
     if (this.recording) { this.takeId = uid(); if (!this.playing) this.play(); }
     this.onTransport();
@@ -345,7 +384,9 @@ export class Engine {
     const horizon = this.tickAt(now + LOOKAHEAD_SEC);
     if (horizon <= this.scheduledUntil) return;
     const from = this.scheduledUntil, to = horizon;
-    scheduleHits(this.mixer, p, from, to, this.timeAt, this.buffers, this.reversed, (pad, time, v, id, abs, isNote) => {
+    if (this.mode === 'clips') this.segments = this.segments.filter((s) => s.end > from); // forget clips that have finished
+    const hits = this.mode === 'clips' ? segmentHits(p, this.segments, from, to) : hitsInWindow(p, from, to);
+    scheduleHits(this.mixer, p, hits, this.timeAt, this.buffers, this.reversed, (pad, time, v, id, abs, isNote) => {
       if (v === null && id !== undefined) { // pre-check: skip a hit the player just performed live
         if (this.suppress.get(id) === abs) { this.suppress.delete(id); return false; }
         return true;
@@ -465,7 +506,7 @@ export class Engine {
     const frames = Math.round(L * spt * sampleRate);
     const { off, mixer, rev } = this.offline((frames * 2) / sampleRate, sampleRate);
     const voices: (Voice | null)[] = new Array(TOTAL_PADS).fill(null);
-    scheduleHits(mixer, p, 0, L * 2, (t) => t * spt, this.buffers, rev, (pad, time, v, _id, _abs, isNote) => {
+    scheduleHits(mixer, p, hitsInWindow(p, 0, L * 2), (t) => t * spt, this.buffers, rev, (pad, time, v, _id, _abs, isNote) => {
       if (v && !isNote) { voices[pad]?.stop(time); voices[pad] = v; }
       return true;
     });

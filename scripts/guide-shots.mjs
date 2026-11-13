@@ -42,8 +42,13 @@ const setups = {
     const cell = (col, row) => ({ x: 46 + (box.width - 46) * ((col + 0.5) / 32), y: (box.height / 15) * (row + 0.5) });
     for (const [col, row] of [[0, 7], [4, 7], [6, 5], [8, 4], [12, 7], [16, 9], [20, 7], [22, 5], [24, 2], [28, 4]]) await page.locator('#roll').click({ position: cell(col, row) });
   },
+  clips: async () => {
+    await page.click('#view-chop'); await page.click('#mod-clips'); await page.click('#save-clip-0'); await page.click('#save-clip-0'); await page.click('#save-clip-1');
+    await page.locator('.clip').nth(0).click(); await page.waitForSelector('.clip.playing'); await page.waitForTimeout(300);
+    return { maxH: 420 };
+  },
   library: async () => {
-    await page.click('#view-chop'); await page.click('#save-sample'); await page.waitForSelector('.toast');
+    await page.click('#play'); await page.click('#mod-studio'); await page.click('#save-sample'); await page.waitForSelector('.toast');
     await page.click('.tab:has-text("Pad")'); await page.click('#save-pad'); await page.waitForTimeout(400);
     await page.click('#library'); await page.click('#lib-save-loop'); await page.waitForFunction(() => document.querySelectorAll('.lib-row').length === 3);
     await page.click('.lib-row >> nth=1 >> text=Rename / tag'); await page.fill('.lib-edit input[name="name"]', 'Kick A1'); await page.fill('.lib-edit input[name="tags"]', 'kick, one-shot');

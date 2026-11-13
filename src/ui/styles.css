@@ -289,3 +289,28 @@ select, input[type="number"], .text, .chat-form textarea, .chat-key input {
 .pad.sel { outline: 2px solid #fff; outline-offset: 2px; }
 .tab.on { text-shadow: 0 0 10px hsl(48 100% 60% / 0.5); }
 .mark { background: var(--accent); }
+
+/* Clips page */
+.clips { grid-row: span 2; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.clips-help { max-width: 90ch; }
+.clip-tracks { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.clip-track { --hue: 0; border-top: 3px solid hsl(var(--hue) 85% 58%); }
+.clip-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; }
+.clip-list { display: flex; flex-direction: column; gap: 8px; }
+.clip-cell { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: stretch; }
+.clip {
+  min-height: 58px; padding: 6px 12px; border-radius: 9px; cursor: pointer; text-align: left; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0;
+  color: hsl(var(--hue) 90% 86%); border: 1px solid hsl(var(--hue) 60% 12%);
+  background: linear-gradient(180deg, hsl(var(--hue) 45% 30%), hsl(var(--hue) 45% 18%));
+  box-shadow: inset 0 1px 0 hsl(var(--hue) 90% 75% / 0.35), 0 2px 4px #000a;
+}
+.clip-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clip .meta { color: inherit; opacity: 0.7; }
+.clip.playing { color: #111; background: linear-gradient(180deg, hsl(var(--hue) 100% 78%), hsl(var(--hue) 90% 56%)); box-shadow: inset 0 1px 0 #fff8, 0 0 18px hsl(var(--hue) 95% 58% / 0.7); }
+.clip.queued, .clip.stopping { animation: pulse 0.5s infinite; }
+.clip-menu { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+.clip-rename { display: flex; gap: 6px; min-width: 0; }
+.clip-add { white-space: normal; min-height: 52px; color: var(--dim); border-style: dashed; }
+@media (prefers-reduced-motion: reduce) { .clip.queued, .clip.stopping { animation: none; outline: 2px dashed var(--fg); } }
+@media (max-aspect-ratio: 1/1), (max-width: 640px) { .clip-tracks { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .clip-tracks { grid-template-columns: minmax(0, 1fr); } }

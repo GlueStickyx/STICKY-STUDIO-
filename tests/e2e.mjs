@@ -176,11 +176,43 @@ try {
   await page.click('#topads');
 
   // Module tabs: tools not built yet say so plainly and lead back to the Sampler.
-  check('a tab exists for every tool', await page.locator('.modules .mod').count() === 9 && await page.locator('.mod .soon').count() === 8);
+  check('a tab exists for every tool', await page.locator('.modules .mod').count() === 9 && await page.locator('.mod .soon').count() === 7);
   await page.click('#mod-arrange');
   check('an unbuilt tool says it is not built and what works today', /not built yet/i.test(await page.locator('.planned-card').innerText()) && /what you can do today/i.test(await page.locator('.planned-card').innerText()) && await page.locator('.pads').count() === 0);
   await page.click('text=Back to the Sampler');
   check('back returns to the working studio', await page.locator('.pad.loaded').count() === 16);
+
+  // Clips: save the loop twice with different content, launch both in time, mix them.
+  await page.click('#mod-clips');
+  await page.click('#save-clip-0');
+  await page.waitForSelector('.clip');
+  await page.click('#mod-studio');
+  await page.dispatchEvent('#pad-5', 'pointerdown');
+  await page.click('#step-2');
+  await page.click('#mod-clips');
+  await page.click('#save-clip-1');
+  check('two clips saved on two tracks', await page.locator('.clip').count() === 2 && await page.locator('#rec[disabled]').count() === 1);
+  await page.locator('.clip').nth(0).click();
+  await page.waitForSelector('.clip.playing');
+  check('launching a clip starts the transport', /\d\.\d/.test(await page.locator('.pos').innerText()));
+  await page.locator('.clip').nth(1).click();
+  await page.waitForSelector('.clip.queued', { timeout: 2000 });
+  check('a second clip waits for the bar line', true);
+  await page.waitForFunction(() => document.querySelectorAll('.clip.playing').length === 2, null, { timeout: 6000 });
+  check('then both play together', true);
+  await page.click('#mute-0');
+  check('mute is shown on the track', await page.locator('#mute-0[aria-pressed="true"]').count() === 1);
+  await page.click('#mute-0');
+  await page.click('#stop-0');
+  await page.waitForFunction(() => document.querySelectorAll('.clip.playing').length === 1, null, { timeout: 6000 });
+  check('stopping a track ends its clip on the bar line and leaves the other playing', true);
+  if (shots) await page.screenshot({ path: `${shots}/clips.png` });
+  await page.click('#play');
+  await page.click('[aria-label^="Options for Clip 1"]');
+  await page.click('text=Edit in Sampler');
+  check('edit in Sampler returns to the pads with the clip loaded', await page.locator('.pad.loaded').count() === 16 && await page.locator('.clips').count() === 0);
+  for (let i = 0; i < 4; i++) await page.click('#undo'); // the clip load, two saves and one step: back to where this block began
+  await page.dispatchEvent('#pad-0', 'pointerdown');
 
   // Guide: every page opens, every picture loads, and every marker has its explanation.
   await page.click('#guide');

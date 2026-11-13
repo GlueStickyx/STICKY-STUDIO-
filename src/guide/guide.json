@@ -92,7 +92,7 @@
         {
           "sel": "#mod-clips",
           "name": "Clips",
-          "text": "Planned: save loops as clips and launch them live, in time."
+          "text": "Save loops as clips and launch them live, in time with each other."
         },
         {
           "sel": "#mod-arrange",
@@ -433,6 +433,47 @@
       ]
     },
     {
+      "id": "clips",
+      "title": "Clips",
+      "clip": ".clips",
+      "intro": "A clip is a saved loop. Make a pattern in the Sampler, save it here, change the pattern, save again. Then launch clips on different tracks and they play together, in time. While this page is open the transport plays clips; everywhere else it plays the Sampler loop.",
+      "marks": [
+        {
+          "sel": ".clip-track",
+          "name": "A track",
+          "text": "Four tracks. One clip plays per track at a time; launching another on the same track replaces it on the next bar."
+        },
+        {
+          "sel": "#mute-0",
+          "name": "M, S and ■",
+          "text": "M mutes the track. S solos it, silencing the others. ■ stops the track's clip at the next bar line."
+        },
+        {
+          "sel": "#vol-0",
+          "name": "Volume",
+          "text": "How loud this track's clips play."
+        },
+        {
+          "sel": ".clip",
+          "name": "A clip",
+          "text": "Tap to launch. It flashes while it waits for the next bar line, then lights up and shows ▶ while it plays. Tap a playing clip to stop it."
+        },
+        {
+          "sel": ".clip-cell .btn.small",
+          "name": "Clip options",
+          "text": "Edit in Sampler puts the clip back into the Sampler loop so you can change it and save it again. Rename and Delete are here too."
+        },
+        {
+          "sel": "#save-clip-0",
+          "name": "Save Sampler loop here",
+          "text": "Saves what the Sampler loop holds right now (steps, recorded hits and piano-roll notes) as a new clip on this track."
+        }
+      ],
+      "notes": [
+        "Clips remember the pattern, not the sounds: they play whatever is on the pads now, with the pads' current effects. Record is switched off on this page because recording writes into the Sampler loop."
+      ]
+    },
+    {
       "id": "library",
       "title": "Library: sounds",
       "clip": ".sheet",
@@ -583,6 +624,16 @@
         "On the Steps tab, tap steps 1, 5, 9 and 13.",
         "Tap another pad and give it its own steps. Tap a step twice for a soft hit.",
         "Press Play and adjust while it loops. Add Swing to loosen it."
+      ]
+    },
+    {
+      "title": "Build a song from clips",
+      "steps": [
+        "Make a drum pattern in the Sampler.",
+        "Open Clips and tap Save Sampler loop here on Track 1.",
+        "Go back to the Sampler, clear the drums, and make a bassline or melody.",
+        "Open Clips and save it on Track 2.",
+        "Tap a clip on each track. They start together on the next bar. Swap clips to move between sections."
       ]
     },
     {

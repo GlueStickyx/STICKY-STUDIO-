@@ -1,7 +1,7 @@
 // The command bus. Every change to the project goes through dispatch(): the UI, undo/redo,
 // autosave and (later) the AI assistant all use this one entry point.
-import { PITCH_MAX, PITCH_MIN, REVERBS, SCALES, STRETCH_MAX, STRETCH_MIN, BANK_COUNT, BAR_TICKS, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, defaultFx, emptyPad, emptyProject, sliceBounds } from './types';
-import type { LoopEvent, Note, Pad, PadFx, Project, Sample } from './types';
+import { TRACK_COUNT, PITCH_MAX, PITCH_MIN, REVERBS, SCALES, STRETCH_MAX, STRETCH_MIN, BANK_COUNT, BAR_TICKS, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, defaultFx, emptyPad, emptyProject, sliceBounds } from './types';
+import type { Clip, LoopEvent, Note, Pad, PadFx, Project, Sample } from './types';
 
 type Handler = (p: Project, args: any) => Project;
 interface CommandDef { run: Handler; undoable: boolean; describe: string }
@@ -120,6 +120,31 @@ export const commands: Record<string, CommandDef> = {
     undoable: false, describe: 'Set the piano-roll scale and the note name of a pad\'s own pitch',
     run: (p, a) => ({ ...p, scale: a.scale in SCALES ? a.scale : p.scale, root: Number.isInteger(a.root) ? clamp(a.root, 0, 11) : p.root }),
   },
+  'clip.saveFromLoop': {
+    undoable: true, describe: 'Save what the Sampler loop is playing as a clip on a track (0-3)',
+    run: (p, a) => {
+      const steps: Record<number, number[]> = {};
+      p.pads.forEach((pad, i) => { if (pad.sampleId && pad.steps.some((v) => v > 0)) steps[i] = [...pad.steps]; });
+      if (!Object.keys(steps).length && !p.events.length && !p.notes.length) return p; // nothing to save
+      const track = clamp(Math.round(a.track ?? 0), 0, TRACK_COUNT - 1);
+      const clip: Clip = { id: String(a.id), name: String(a.name || `Clip ${p.clips.length + 1}`).slice(0, 40), track, bars: p.bars, steps, events: [...p.events], notes: [...p.notes] };
+      return { ...p, clips: [...p.clips, clip] };
+    },
+  },
+  'clip.rename': { undoable: true, describe: 'Rename a clip', run: (p, a) => ({ ...p, clips: p.clips.map((c) => (c.id === a.id ? { ...c, name: String(a.name).trim().slice(0, 40) || c.name } : c)) }) },
+  'clip.remove': { undoable: true, describe: 'Delete a clip', run: (p, a) => (p.clips.some((c) => c.id === a.id) ? { ...p, clips: p.clips.filter((c) => c.id !== a.id) } : p) },
+  'clip.loadToLoop': {
+    undoable: true, describe: 'Put a clip back into the Sampler loop for editing (replaces the loop\'s steps, recorded hits and notes)',
+    run: (p, a) => {
+      const c = p.clips.find((x) => x.id === a.id);
+      if (!c) return p;
+      return { ...p, bars: c.bars as Project['bars'], events: [...c.events], notes: [...c.notes], pads: p.pads.map((pad, i) => ({ ...pad, steps: c.steps[i] ? [...c.steps[i]] : new Array(STEP_COUNT).fill(0) })) };
+    },
+  },
+  'track.set': {
+    undoable: false, describe: 'Set a clip track\'s volume (0-1.5), mute or solo',
+    run: (p, a) => ({ ...p, tracks: p.tracks.map((t, i) => (i === a.track ? { vol: typeof a.vol === 'number' ? clamp(a.vol, 0, 1.5) : t.vol, mute: a.mute ?? t.mute, solo: a.solo ?? t.solo } : t)) }),
+  },
   'loop.addEvent': { undoable: true, describe: 'Record one pad hit into the loop', run: (p, a) => ({ ...p, events: [...p.events, a.event as LoopEvent] }) },
   'loop.clearPad': { undoable: true, describe: 'Erase recorded hits of one pad', run: (p, a) => ({ ...p, events: p.events.filter((e) => e.pad !== a.pad) }) },
   'loop.clear': { undoable: true, describe: 'Erase all recorded hits', run: (p) => ({ ...p, events: [] }) },
@@ -174,7 +199,7 @@ export function dispatch(name: string, args: any = {}, opts: { group?: string; s
 /** Settings that are not undoable stay as they are when history moves. */
 function keepSettings(target: Project): Project {
   const active = target.samples.some((s) => s.id === state.activeSampleId) ? state.activeSampleId : target.activeSampleId;
-  return { ...target, selectedPad: state.selectedPad, metronome: state.metronome, quantize: state.quantize, activeSampleId: active, scale: state.scale, root: state.root };
+  return { ...target, selectedPad: state.selectedPad, metronome: state.metronome, quantize: state.quantize, activeSampleId: active, scale: state.scale, root: state.root, tracks: state.tracks };
 }
 export function undo() { const prev = past.pop(); if (!prev) return; future.push(state); state = keepSettings(prev); lastKey = ''; emit(); }
 export function redo() { const next = future.pop(); if (!next) return; past.push(state); state = keepSettings(next); lastKey = ''; emit(); }
