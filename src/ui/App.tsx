@@ -17,6 +17,7 @@ import { padHue } from './colors';
 import { inArtifact } from '../ai/viewer';
 import { Arrange } from './Arrange';
 import { Chat } from './Chat';
+import { MixerView } from './MixerView';
 import { Clips } from './Clips';
 import { Waveform } from './Waveform';
 import type { Tool } from './Waveform';
@@ -91,7 +92,7 @@ function Studio() {
           </button>
         ))}
       </nav>
-      {module === 'arrange' ? <Arrange p={p} say={setMsg} /> : module === 'clips' ? <Clips p={p} say={setMsg} toSampler={() => setModule('studio')} /> : module !== 'studio' ? <Planned id={module} back={() => setModule('studio')} /> : (
+      {module === 'mixer' ? <MixerView p={p} /> : module === 'arrange' ? <Arrange p={p} say={setMsg} /> : module === 'clips' ? <Clips p={p} say={setMsg} toSampler={() => setModule('studio')} /> : module !== 'studio' ? <Planned id={module} back={() => setModule('studio')} /> : (
         <>
       <section className="chop">
         {view === 'chop' ? (

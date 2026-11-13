@@ -20,7 +20,8 @@ async function wavStats(download) {
   const rate = buf.readUInt32LE(24);
   // RMS of the left channel between two times in seconds.
   const rms = (from, to) => { let sum = 0, n = 0; for (let f = Math.floor(from * rate); f < to * rate && 44 + f * 4 + 1 < buf.length; f++) { const v = buf.readInt16LE(44 + f * 4) / 32768; sum += v * v; n++; } return Math.sqrt(sum / Math.max(1, n)); };
-  return { bytes: buf.length, peak, rate, channels: buf.readUInt16LE(22), rms };
+  const rmsR = (from, to) => { let sum = 0, n = 0; for (let f = Math.floor(from * rate); f < to * rate && 44 + f * 4 + 3 < buf.length; f++) { const v = buf.readInt16LE(44 + f * 4 + 2) / 32768; sum += v * v; n++; } return Math.sqrt(sum / Math.max(1, n)); };
+  return { bytes: buf.length, peak, rate, channels: buf.readUInt16LE(22), rms, rmsR };
 }
 
 try {
@@ -176,8 +177,8 @@ try {
   await page.click('#topads');
 
   // Module tabs: tools not built yet say so plainly and lead back to the Sampler.
-  check('a tab exists for every tool', await page.locator('.modules .mod').count() === 9 && await page.locator('.mod .soon').count() === 6);
-  await page.click('#mod-mixer');
+  check('a tab exists for every tool', await page.locator('.modules .mod').count() === 9 && await page.locator('.mod .soon').count() === 5);
+  await page.click('#mod-analyze');
   check('an unbuilt tool says it is not built and what works today', /not built yet/i.test(await page.locator('.planned-card').innerText()) && /what you can do today/i.test(await page.locator('.planned-card').innerText()) && await page.locator('.pads').count() === 0);
   await page.click('text=Back to the Sampler');
   check('back returns to the working studio', await page.locator('.pad.loaded').count() === 16);
@@ -240,6 +241,32 @@ try {
   check('edit in Sampler returns to the pads with the clip loaded', await page.locator('.pad.loaded').count() === 16 && await page.locator('.clips').count() === 0);
   for (let i = 0; i < 8; i++) await page.click('#undo'); // clip load, three placements (the overlapping one was refused), one repeat, two saves, one step: back to where this block began
   await page.dispatchEvent('#pad-0', 'pointerdown');
+
+  // Mixer: it shapes the exported audio. Bank A holds the starter beat.
+  const mixBase = await exportStats();
+  await page.click('#mod-mixer');
+  await page.click('#mix-mute-0');
+  check('muting bank A silences the loop export', (await exportStats()).peak === 0);
+  await page.click('#mix-mute-0');
+  await page.click('#mix-solo-1');
+  check('soloing an empty bank silences everything else', (await exportStats()).peak === 0);
+  await page.click('#mix-solo-1');
+  await page.fill('#pan-0', '-1');
+  const left = await exportStats();
+  check('panning hard left empties the right channel', left.rmsR(0, 4.8) < left.rms(0, 4.8) * 0.05, `L ${left.rms(0, 4.8).toFixed(4)} R ${left.rmsR(0, 4.8).toFixed(5)}`);
+  await page.fill('#pan-0', '0');
+  await page.fill('#eq-high-0', '-12');
+  await page.fill('#eq-mid-0', '-12');
+  await page.fill('#eq-low-0', '-12');
+  check('cutting all EQ bands makes it quieter', (await exportStats()).rms(0, 4.8) < mixBase.rms(0, 4.8) * 0.5);
+  await page.click('#mix-reset');
+  check('reset brings the sound back', Math.abs((await exportStats()).rms(0, 4.8) - mixBase.rms(0, 4.8)) < 0.002);
+  await page.click('#play');
+  await page.waitForFunction(() => parseFloat(getComputedStyle(document.querySelectorAll('.meter')[0]).getPropertyValue('--level')) > 0.05, null, { timeout: 4000 });
+  check('meters move while the loop plays', true);
+  if (shots) await page.screenshot({ path: `${shots}/mixer.png` });
+  await page.click('#play');
+  await page.click('#mod-studio');
 
   // Guide: every page opens, every picture loads, and every marker has its explanation.
   await page.click('#guide');

@@ -111,6 +111,13 @@ export interface Clip {
 export interface Placement { id: string; clipId: string; bar: number; repeats: number }
 export const MAX_SONG_BARS = 256;
 export interface Track { vol: number; mute: boolean; solo: boolean }
+/** One mixer channel per pad bank. EQ values are in decibels (-12..12). */
+export interface Channel { vol: number; pan: number; low: number; mid: number; high: number; mute: boolean; solo: boolean }
+export interface MixerState { channels: Channel[]; master: number }
+export const emptyChannel = (): Channel => ({ vol: 1, pan: 0, low: 0, mid: 0, high: 0, mute: false, solo: false });
+export const emptyMixer = (): MixerState => ({ channels: Array.from({ length: 4 }, emptyChannel), master: 1 });
+/** How loud a channel plays right now: 0 when muted, or when another channel is soloed. */
+export const channelGain = (m: MixerState, i: number) => { const c = m.channels[i]; return !c || c.mute || (m.channels.some((x) => x.solo) && !c.solo) ? 0 : c.vol; };
 export const TRACK_COUNT = 4;
 export const emptyTracks = (): Track[] => Array.from({ length: TRACK_COUNT }, () => ({ vol: 1, mute: false, solo: false }));
 /** How loud a track plays right now: 0 when muted, or when another track is soloed. */
@@ -133,6 +140,7 @@ export interface Project {
   clips: Clip[];
   tracks: Track[];
   arrangement: Placement[];
+  mixer: MixerState;
   /** Scale shown in the piano roll, counted from the pad's own pitch. */
   scale: ScaleName;
   /** Note name (0 = C) given to a pad's own pitch, for labels and MIDI files. */
@@ -148,7 +156,7 @@ export function emptyProject(): Project {
     version: 1, bpm: 120, swing: 0, bars: 2, quantize: STEP_TICKS, metronome: false,
     samples: [], activeSampleId: null,
     pads: Array.from({ length: TOTAL_PADS }, emptyPad),
-    selectedPad: 0, events: [], notes: [], clips: [], tracks: emptyTracks(), arrangement: [], scale: 'minor', root: 0,
+    selectedPad: 0, events: [], notes: [], clips: [], tracks: emptyTracks(), arrangement: [], mixer: emptyMixer(), scale: 'minor', root: 0,
   };
 }
 
@@ -165,7 +173,7 @@ export function parsePad(label: unknown): number | null {
 /** Bring a project saved by an older version up to the current shape. */
 export function normalizeProject(p: Project): Project {
   const pads = Array.from({ length: TOTAL_PADS }, (_, i) => (p.pads[i] ? { ...p.pads[i], fx: { ...defaultFx(), ...p.pads[i].fx } } : emptyPad()));
-  return { ...p, pads, selectedPad: Math.min(Math.max(0, p.selectedPad ?? 0), TOTAL_PADS - 1), notes: p.notes ?? [], clips: p.clips ?? [], arrangement: p.arrangement ?? [], tracks: p.tracks?.length === TRACK_COUNT ? p.tracks : emptyTracks(), scale: p.scale in SCALES ? p.scale : 'minor', root: p.root ?? 0 };
+  return { ...p, pads, selectedPad: Math.min(Math.max(0, p.selectedPad ?? 0), TOTAL_PADS - 1), notes: p.notes ?? [], clips: p.clips ?? [], arrangement: p.arrangement ?? [], mixer: p.mixer?.channels?.length === 4 ? p.mixer : emptyMixer(), tracks: p.tracks?.length === TRACK_COUNT ? p.tracks : emptyTracks(), scale: p.scale in SCALES ? p.scale : 'minor', root: p.root ?? 0 };
 }
 
 export function uid(): string {

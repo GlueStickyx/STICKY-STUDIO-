@@ -1,6 +1,6 @@
 // The command bus. Every change to the project goes through dispatch(): the UI, undo/redo,
 // autosave and (later) the AI assistant all use this one entry point.
-import { MAX_SONG_BARS, TRACK_COUNT, PITCH_MAX, PITCH_MIN, REVERBS, SCALES, STRETCH_MAX, STRETCH_MIN, BANK_COUNT, BAR_TICKS, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, defaultFx, emptyPad, emptyProject, sliceBounds } from './types';
+import { emptyMixer, MAX_SONG_BARS, TRACK_COUNT, PITCH_MAX, PITCH_MIN, REVERBS, SCALES, STRETCH_MAX, STRETCH_MIN, BANK_COUNT, BAR_TICKS, DELAY_TIMES, PAD_COUNT, STEP_COUNT, STUTTERS, TOTAL_PADS, bankOf, defaultFx, emptyPad, emptyProject, sliceBounds } from './types';
 import type { Placement, Clip, LoopEvent, Note, Pad, PadFx, Project, Sample } from './types';
 
 type Handler = (p: Project, args: any) => Project;
@@ -146,6 +146,19 @@ export const commands: Record<string, CommandDef> = {
   'arr.setRepeats': { undoable: true, describe: 'Set how many times a placed clip repeats', run: (p, a) => { const pl = p.arrangement.find((x) => x.id === a.id); return pl ? fitPlacement(p, { ...pl, repeats: a.repeats }) : p; } },
   'arr.remove': { undoable: true, describe: 'Take a clip off the song timeline', run: (p, a) => (p.arrangement.some((x) => x.id === a.id) ? { ...p, arrangement: p.arrangement.filter((x) => x.id !== a.id) } : p) },
   'arr.clear': { undoable: true, describe: 'Empty the song timeline', run: (p) => (p.arrangement.length ? { ...p, arrangement: [] } : p) },
+  'mix.set': {
+    undoable: true, describe: 'Change a mixer channel (0-3 = banks A-D): vol 0-1.5, pan -1..1, low/mid/high -12..12 dB, mute, solo',
+    run: (p, a) => {
+      const num = (v: unknown, lo: number, hi: number, cur: number) => (typeof v === 'number' && Number.isFinite(v) ? clamp(v, lo, hi) : cur);
+      return { ...p, mixer: { ...p.mixer, channels: p.mixer.channels.map((c, i) => (i !== a.channel ? c : {
+        vol: num(a.vol, 0, 1.5, c.vol), pan: num(a.pan, -1, 1, c.pan),
+        low: num(a.low, -12, 12, c.low), mid: num(a.mid, -12, 12, c.mid), high: num(a.high, -12, 12, c.high),
+        mute: typeof a.mute === 'boolean' ? a.mute : c.mute, solo: typeof a.solo === 'boolean' ? a.solo : c.solo,
+      })) } };
+    },
+  },
+  'mix.master': { undoable: true, describe: 'Set the master volume 0-1.5', run: (p, a) => ({ ...p, mixer: { ...p.mixer, master: typeof a.vol === 'number' ? clamp(a.vol, 0, 1.5) : p.mixer.master } }) },
+  'mix.reset': { undoable: true, describe: 'Put every mixer channel back to its starting position', run: (p) => ({ ...p, mixer: emptyMixer() }) },
   'track.set': {
     undoable: false, describe: 'Set a clip track\'s volume (0-1.5), mute or solo',
     run: (p, a) => ({ ...p, tracks: p.tracks.map((t, i) => (i === a.track ? { vol: typeof a.vol === 'number' ? clamp(a.vol, 0, 1.5) : t.vol, mute: a.mute ?? t.mute, solo: a.solo ?? t.solo } : t)) }),

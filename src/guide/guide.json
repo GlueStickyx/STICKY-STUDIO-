@@ -102,7 +102,7 @@
         {
           "sel": "#mod-mixer",
           "name": "Mixer",
-          "text": "Planned: a channel strip per track with volume, pan, EQ and meters."
+          "text": "A channel strip for each pad bank with level, pan, EQ, mute, solo and meters."
         },
         {
           "sel": "#mod-analyze",
@@ -527,6 +527,52 @@
       ],
       "notes": [
         "Track volume, mute and solo are set on the Clips page and apply here too."
+      ]
+    },
+    {
+      "id": "mixer",
+      "title": "Mixer",
+      "clip": ".mixer",
+      "intro": "One channel strip for each bank of pads, plus a master. Everything on bank A goes through strip A, wherever it plays: the Sampler loop, Clips or Arrange. The mixer is part of every export.",
+      "marks": [
+        {
+          "sel": "#eq-high-0",
+          "name": "High, Mid, Low",
+          "text": "Tone controls. Turn High down to soften harsh hats, Low down to clean up a muddy bank, Mid up to bring a vocal forward. Double-tap a slider to put it back to 0."
+        },
+        {
+          "sel": "#pan-0",
+          "name": "Pan",
+          "text": "Places the bank left or right. Centre is normal; spreading banks a little apart makes a mix feel wider."
+        },
+        {
+          "sel": "#fader-0",
+          "name": "Fader",
+          "text": "The bank's level. Drag up or down. Double-tap to go back to 0 dB."
+        },
+        {
+          "sel": ".strip .meter",
+          "name": "Meter",
+          "text": "How loud the bank is right now. Green is fine, yellow is loud, red means it is too hot."
+        },
+        {
+          "sel": "#mix-mute-0",
+          "name": "Mute and Solo",
+          "text": "Mute silences the bank. Solo plays only the soloed banks, so you can hear one part on its own."
+        },
+        {
+          "sel": "#fader-master",
+          "name": "Master",
+          "text": "The level of everything together. If its meter hits red, pull the bank faders down rather than the master."
+        },
+        {
+          "sel": "#mix-reset",
+          "name": "Reset mixer",
+          "text": "Puts every strip back to flat and centred. Undo brings your settings back."
+        }
+      ],
+      "notes": [
+        "Clips tracks have their own volume, mute and solo on the Clips page; they are separate from the bank strips here. Pads saved to the Library or resampled are printed without the mixer, so a muted bank does not end up as a silent sample."
       ]
     },
     {

@@ -88,7 +88,11 @@ Clips store patterns only; they play the pads' current sounds and effects.
 Arrange (`src/ui/Arrange.tsx`): placements of clips on a bar timeline (`arrangementSegments`), song playback
 (`engine.mode = 'song'`), `engine.renderSong` for export. The top-bar Export still exports the Sampler loop.
 
-Next, in the order shown on the module tabs: Mixer → Analyze (auto cuts incl. vocals) →
+Mixer (`src/ui/MixerView.tsx`, `Mixer` class in engine.ts): one strip per pad bank (EQ, pan, fader, mute,
+solo, meter) + master bus; applied in live playback and every export except `renderPad` (neutral mix).
+The assistant has no mixer tool yet.
+
+Next, in the order shown on the module tabs: Analyze (auto cuts incl. vocals) →
 Stems → Suno workstation → AI setup (Gemini/GPT/local keys, knowledge shelf, research mode) → Plugins (desktop).
 Alongside: co-pilot mode (explained steps, point-and-ask, starter kit), sample "recipes", sampler extras
 (attack/decay, choke groups, velocity, 8/16-bar loops, 32 steps, probability, pattern chains, chords,

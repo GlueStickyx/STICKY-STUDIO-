@@ -3,7 +3,7 @@
 import { dispatch, getProject, subscribe } from '../core/bus';
 import { beatsInWindow, hitsInWindow, loopTicks, nextBar, quantizeTick, secondsPerTick, segmentHits, arrangementSegments, songBars } from '../core/sequence';
 import type { Hit, Segment } from '../core/sequence';
-import { BAR_TICKS, DELAY_TIMES, REVERBS, TOTAL_PADS, defaultFx, isGranular, uid } from '../core/types';
+import { emptyMixer, BANK_COUNT, BAR_TICKS, DELAY_TIMES, REVERBS, bankOf, channelGain, TOTAL_PADS, defaultFx, isGranular, uid } from '../core/types';
 import type { Pad, Project, ReverbSize } from '../core/types';
 import { computePeaks, mixToMono } from './analysis';
 
@@ -62,25 +62,59 @@ function impulse(size: ReverbSize, sampleRate: number): Float32Array<ArrayBuffer
 export class Mixer {
   private delays = new Map<number, { input: GainNode; delay: DelayNode; fb: GainNode }>();
   private reverbs = new Map<ReverbSize, ConvolverNode>();
-  constructor(readonly ctx: Ctx, readonly out: AudioNode) {}
+  /** One strip per pad bank: input -> low shelf -> peak -> high shelf -> pan -> fader -> meter -> master bus. */
+  private strips: { input: GainNode; low: BiquadFilterNode; mid: BiquadFilterNode; high: BiquadFilterNode; pan: StereoPannerNode; fader: GainNode; meter: AnalyserNode }[] = [];
+  private bus: GainNode;
+  private busMeter: AnalyserNode;
+  private scratch = new Float32Array(1024);
+  constructor(readonly ctx: Ctx, readonly out: AudioNode) {
+    this.bus = ctx.createGain();
+    this.busMeter = ctx.createAnalyser();
+    this.busMeter.fftSize = 1024;
+    this.bus.connect(out);
+    this.bus.connect(this.busMeter);
+    for (let i = 0; i < BANK_COUNT; i++) {
+      const s = {
+        input: ctx.createGain(), low: ctx.createBiquadFilter(), mid: ctx.createBiquadFilter(), high: ctx.createBiquadFilter(),
+        pan: ctx.createStereoPanner(), fader: ctx.createGain(), meter: ctx.createAnalyser(),
+      };
+      s.low.type = 'lowshelf'; s.low.frequency.value = 200;
+      s.mid.type = 'peaking'; s.mid.frequency.value = 1000; s.mid.Q.value = 0.8;
+      s.high.type = 'highshelf'; s.high.frequency.value = 5000;
+      s.meter.fftSize = 1024;
+      s.input.connect(s.low).connect(s.mid).connect(s.high).connect(s.pan).connect(s.fader);
+      s.fader.connect(this.bus); s.fader.connect(s.meter);
+      this.strips.push(s);
+    }
+  }
 
-  /** Bring echo settings in line with the project. Cheap; call whenever the project changes. */
+  /** Bring echo and mixer settings in line with the project. Cheap; call whenever the project changes. */
   sync(p: Project) {
     p.pads.forEach((pad, i) => {
       if (pad.fx.delayMix <= 0 && !this.delays.has(i)) return;
       let d = this.delays.get(i);
       if (!d) {
         d = { input: this.ctx.createGain(), delay: this.ctx.createDelay(2), fb: this.ctx.createGain() };
-        d.input.connect(d.delay); d.delay.connect(d.fb); d.fb.connect(d.delay); d.delay.connect(this.out);
+        d.input.connect(d.delay); d.delay.connect(d.fb); d.fb.connect(d.delay); d.delay.connect(this.channel(i));
         this.delays.set(i, d);
       }
       d.delay.delayTime.value = Math.min(2, (DELAY_TIMES[pad.fx.delayTime] * 60) / p.bpm);
       d.fb.gain.value = pad.fx.delayFeedback;
     });
+    const t = this.ctx.currentTime;
+    this.strips.forEach((s, i) => {
+      const c = p.mixer.channels[i];
+      s.low.gain.setTargetAtTime(c.low, t, 0.01); s.mid.gain.setTargetAtTime(c.mid, t, 0.01); s.high.gain.setTargetAtTime(c.high, t, 0.01);
+      s.pan.pan.setTargetAtTime(c.pan, t, 0.01);
+      s.fader.gain.setTargetAtTime(channelGain(p.mixer, i), t, 0.01);
+    });
+    this.bus.gain.setTargetAtTime(p.mixer.master, t, 0.01);
   }
+  /** The mixer channel a pad plays through (its bank's strip). The audition voice (-1) goes straight to the bus. */
+  channel(pad: number): AudioNode { return pad < 0 ? this.bus : this.strips[bankOf(pad)].input; }
   /** The echo input for a pad, or null when the pad has no echo line yet. */
   send(i: number): AudioNode | null { return this.delays.get(i)?.input ?? null; }
-  /** The shared reverb of one size, created on first use. */
+  /** The shared reverb of one size, created on first use. Its output goes to the master bus. */
   reverb(size: ReverbSize): AudioNode {
     let c = this.reverbs.get(size);
     if (!c) {
@@ -91,10 +125,19 @@ export class Mixer {
       c.buffer = buf;
       const wet = this.ctx.createGain();
       wet.gain.value = 1.6; // the normalised impulse is quiet next to the dry sound
-      c.connect(wet).connect(this.out);
+      c.connect(wet).connect(this.bus);
       this.reverbs.set(size, c);
     }
     return c;
+  }
+  /** Peak level (0..1+) of each channel, then the master, right now. For the meters. */
+  levels(): number[] {
+    return [...this.strips.map((s) => s.meter), this.busMeter].map((m) => {
+      m.getFloatTimeDomainData(this.scratch);
+      let peak = 0;
+      for (let i = 0; i < this.scratch.length; i++) { const v = Math.abs(this.scratch[i]); if (v > peak) peak = v; }
+      return peak;
+    });
   }
 }
 
@@ -132,7 +175,7 @@ export function playPadVoice(mixer: Mixer, padIndex: number, buffer: AudioBuffer
     f.Q.value = 0.5 + fx.resonance * 14;
     f.connect(head); head = f;
   }
-  level.connect(mixer.out);
+  level.connect(mixer.channel(padIndex));
   const send = fx.delayMix > 0 ? mixer.send(padIndex) : null;
   if (send) { const s = ctx.createGain(); s.gain.value = fx.delayMix; level.connect(s).connect(send); }
   if (fx.reverb > 0) { const s = ctx.createGain(); s.gain.value = fx.reverb; level.connect(s).connect(mixer.reverb(fx.reverbSize)); }
@@ -269,6 +312,9 @@ export class Engine {
     }
     if (this.ctx.state !== 'running') await this.ctx.resume();
   }
+
+  /** Peak level of each mixer channel (A-D) and the master, for the meters. Zeros before audio starts. */
+  levels(): number[] { return this.mixer ? this.mixer.levels() : [0, 0, 0, 0, 0]; }
 
   /** Output delay the browser reports, in milliseconds (null if unknown). */
   latencyMs(): number | null {
@@ -484,13 +530,14 @@ export class Engine {
     return () => { try { node.stop(); } catch { /* already ended */ } };
   }
 
-  private offline(seconds: number, sampleRate: number) {
+  /** `neutralMix`: ignore the mixer (used when printing one pad, so a muted or EQ'd channel does not end up baked into the sound). */
+  private offline(seconds: number, sampleRate: number, neutralMix = false) {
     const off = new OfflineAudioContext(2, Math.max(1, Math.round(seconds * sampleRate)), sampleRate);
     const master = off.createGain();
     master.gain.value = 0.9;
     master.connect(off.destination);
     const mixer = new Mixer(off, master);
-    mixer.sync(getProject());
+    mixer.sync(neutralMix ? { ...getProject(), mixer: emptyMixer() } : getProject());
     const cache = new Map<string, AudioBuffer>();
     const rev = (id: string) => {
       const b = this.buffers.get(id);
@@ -550,7 +597,7 @@ export class Engine {
     // Echo tail: until the repeats have decayed by 60 dB, at most 8 seconds.
     const tail = fx.delayMix > 0 ? Math.min(8, echo * (1 + (fx.delayFeedback > 0 ? Math.log(0.001) / Math.log(fx.delayFeedback) : 0))) : 0.02;
     const room = fx.reverb > 0 ? REVERBS[fx.reverbSize] : 0;
-    const { off, mixer, rev } = this.offline(played + Math.max(tail, room), sampleRate);
+    const { off, mixer, rev } = this.offline(played + Math.max(tail, room), sampleRate, true);
     playPadVoice(mixer, i, buf, pad.reverse ? rev(pad.sampleId!) : null, { ...pad, gain: 1 }, 0, 1);
     const out = await off.startRendering();
     return [out.getChannelData(0), out.getChannelData(1)];

@@ -55,8 +55,13 @@ const setups = {
     await page.locator('.brush').nth(1).click(); await lane(0).click({ position: { x: 48 * 4 + 10, y: 20 } });
     return { maxH: 430 };
   },
+  mixer: async () => {
+    await page.click('#mod-mixer'); await page.fill('#eq-high-0', '-3'); await page.fill('#pan-1', '-0.3'); await page.fill('#fader-1', '0.8');
+    await page.click('#play'); await page.waitForTimeout(700);
+    return { maxH: 600 };
+  },
   library: async () => {
-    await page.click('#mod-studio'); await page.click('#save-sample'); await page.waitForSelector('.toast');
+    await page.click('#play'); await page.click('#mix-reset'); await page.click('#mod-studio'); await page.click('#save-sample'); await page.waitForSelector('.toast');
     await page.click('.tab:has-text("Pad")'); await page.click('#save-pad'); await page.waitForTimeout(400);
     await page.click('#library'); await page.click('#lib-save-loop'); await page.waitForFunction(() => document.querySelectorAll('.lib-row').length === 3);
     await page.click('.lib-row >> nth=1 >> text=Rename / tag'); await page.fill('.lib-edit input[name="name"]', 'Kick A1'); await page.fill('.lib-edit input[name="tags"]', 'kick, one-shot');
