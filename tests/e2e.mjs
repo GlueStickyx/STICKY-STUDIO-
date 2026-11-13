@@ -177,8 +177,8 @@ try {
   await page.click('#topads');
 
   // Module tabs: tools not built yet say so plainly and lead back to the Sampler.
-  check('a tab exists for every tool', await page.locator('.modules .mod').count() === 9 && await page.locator('.mod .soon').count() === 5);
-  await page.click('#mod-analyze');
+  check('a tab exists for every tool', await page.locator('.modules .mod').count() === 9 && await page.locator('.mod .soon').count() === 4);
+  await page.click('#mod-stems');
   check('an unbuilt tool says it is not built and what works today', /not built yet/i.test(await page.locator('.planned-card').innerText()) && /what you can do today/i.test(await page.locator('.planned-card').innerText()) && await page.locator('.pads').count() === 0);
   await page.click('text=Back to the Sampler');
   check('back returns to the working studio', await page.locator('.pad.loaded').count() === 16);
@@ -267,6 +267,42 @@ try {
   if (shots) await page.screenshot({ path: `${shots}/mixer.png` });
   await page.click('#play');
   await page.click('#mod-studio');
+
+  // Analyze: a 16-second test song (120 BPM kick + hats, a sung-like line from 6 to 10 s).
+  const asr = 22050, alen = asr * 16, apcm = Buffer.alloc(44 + alen * 2);
+  apcm.write('RIFF', 0); apcm.writeUInt32LE(36 + alen * 2, 4); apcm.write('WAVEfmt ', 8); apcm.writeUInt32LE(16, 16); apcm.writeUInt16LE(1, 20);
+  apcm.writeUInt16LE(1, 22); apcm.writeUInt32LE(asr, 24); apcm.writeUInt32LE(asr * 2, 28); apcm.writeUInt16LE(2, 32); apcm.writeUInt16LE(16, 34);
+  apcm.write('data', 36); apcm.writeUInt32LE(alen * 2, 40);
+  let aseed = 9; const arnd = () => { aseed = (aseed * 16807) % 2147483647; return (aseed / 2147483647) * 2 - 1; };
+  const asig = new Float32Array(alen);
+  for (let b = 0; b < 32; b++) {
+    for (let i = 0; i < asr * 0.2; i++) asig[b * asr / 2 + i] += Math.sin(2 * Math.PI * 55 * i / asr) * Math.exp(-14 * i / asr) * 0.7;
+    const h = Math.floor((b * 0.5 + 0.25) * asr); for (let i = 0; i < asr * 0.04; i++) if (h + i < alen) asig[h + i] += arnd() * Math.exp(-90 * i / asr) * 0.25;
+  }
+  let aph = 0; for (let i = 6 * asr; i < 10 * asr; i++) { aph += 2 * Math.PI * 220 * (1 + 0.01 * Math.sin(2 * Math.PI * 5 * i / asr)) / asr; asig[i] += (Math.sin(aph) + 0.5 * Math.sin(2 * aph)) * 0.3; }
+  for (let i = 0; i < alen; i++) apcm.writeInt16LE(Math.max(-32767, Math.min(32767, Math.round(asig[i] * 32767))), 44 + i * 2);
+  await page.click('#mod-analyze');
+  await page.setInputFiles('#an-file', { name: 'test-song.wav', mimeType: 'audio/wav', buffer: apcm });
+  await page.waitForSelector('#an-sample option:has-text("test-song")', { state: 'attached' });
+  await page.click('#an-run');
+  await page.waitForSelector('.an-col', { timeout: 15000 });
+  const cols = await page.locator('.an-col').allInnerTexts();
+  check('analysis finds loops, hits and the sung line', /Loops \(([1-9]\d*)\)/.test(cols[0]) && /Hits \(([1-9]\d*)\)/.test(cols[1]) && /0:0[5-7]/.test(cols[2]), cols.map((c) => c.split('\n')[0]).join(' | '));
+  check('the tempo is offered', (await page.locator('.analyze .chopbar').first().innerText()).includes('Use 120'));
+  await page.selectOption('#an-bank', '2');
+  await page.click('#an-send');
+  await page.waitForSelector('.toast:has-text("on pads C1")');
+  await page.click('#mod-studio');
+  await page.click('#bank-2');
+  check('ticked suggestions land on bank C', await page.locator('.pad.loaded').count() >= 8);
+  await page.click('#undo');
+  check('one undo takes them off again', await page.locator('.pad.loaded').count() === 0);
+  await page.click('#bank-0');
+  await page.dispatchEvent('#pad-0', 'pointerdown');
+  await page.click('#mod-analyze');
+  if (shots) await page.screenshot({ path: `${shots}/analyze.png` });
+  await page.click('#mod-studio');
+  await page.selectOption('#sample', { label: 'Demo loop' }); // back to the sample the later checks expect
 
   // Guide: every page opens, every picture loads, and every marker has its explanation.
   await page.click('#guide');

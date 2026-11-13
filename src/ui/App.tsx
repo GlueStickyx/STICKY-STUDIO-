@@ -16,6 +16,7 @@ import { PianoRoll } from './PianoRoll';
 import { padHue } from './colors';
 import { inArtifact } from '../ai/viewer';
 import { Arrange } from './Arrange';
+import { Analyze } from './Analyze';
 import { Chat } from './Chat';
 import { MixerView } from './MixerView';
 import { Clips } from './Clips';
@@ -92,7 +93,7 @@ function Studio() {
           </button>
         ))}
       </nav>
-      {module === 'mixer' ? <MixerView p={p} /> : module === 'arrange' ? <Arrange p={p} say={setMsg} /> : module === 'clips' ? <Clips p={p} say={setMsg} toSampler={() => setModule('studio')} /> : module !== 'studio' ? <Planned id={module} back={() => setModule('studio')} /> : (
+      {module === 'analyze' ? <Analyze p={p} say={setMsg} /> : module === 'mixer' ? <MixerView p={p} /> : module === 'arrange' ? <Arrange p={p} say={setMsg} /> : module === 'clips' ? <Clips p={p} say={setMsg} toSampler={() => setModule('studio')} /> : module !== 'studio' ? <Planned id={module} back={() => setModule('studio')} /> : (
         <>
       <section className="chop">
         {view === 'chop' ? (

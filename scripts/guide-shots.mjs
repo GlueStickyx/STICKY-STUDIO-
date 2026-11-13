@@ -60,8 +60,13 @@ const setups = {
     await page.click('#play'); await page.waitForTimeout(700);
     return { maxH: 600 };
   },
+  analyze: async () => {
+    await page.click('#play'); await page.click('#mix-reset');
+    await page.click('#mod-analyze'); await page.selectOption('#an-sample', { index: 0 }); await page.click('#an-run'); await page.waitForSelector('.an-col');
+    return { maxH: 640 };
+  },
   library: async () => {
-    await page.click('#play'); await page.click('#mix-reset'); await page.click('#mod-studio'); await page.click('#save-sample'); await page.waitForSelector('.toast');
+    await page.click('#mod-studio'); await page.click('#save-sample'); await page.waitForSelector('.toast');
     await page.click('.tab:has-text("Pad")'); await page.click('#save-pad'); await page.waitForTimeout(400);
     await page.click('#library'); await page.click('#lib-save-loop'); await page.waitForFunction(() => document.querySelectorAll('.lib-row').length === 3);
     await page.click('.lib-row >> nth=1 >> text=Rename / tag'); await page.fill('.lib-edit input[name="name"]', 'Kick A1'); await page.fill('.lib-edit input[name="tags"]', 'kick, one-shot');

@@ -357,3 +357,17 @@ select, input[type="number"], .text, .chat-form textarea, .chat-key input {
 .strip-db { text-align: center; font: 600 13px var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
 .strip-ms .btn { flex: 1; }
 @media (max-aspect-ratio: 1/1), (max-width: 640px) { .strips { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Analyze page */
+.analyze { grid-row: span 2; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.an-overview { flex: none; height: 84px; border-radius: var(--radius); background: #0b0c0e; border: 1px solid #000; box-shadow: inset 0 3px 10px #000d; overflow: hidden; }
+.an-overview canvas { display: block; width: 100%; height: 100%; }
+.an-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.an-col { --hue: 200; border-top: 3px solid hsl(var(--hue) 85% 58%); gap: 6px; }
+.an-item { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 8px; }
+.an-item.on { background: hsl(var(--hue) 50% 20% / 0.6); }
+.an-check { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; cursor: pointer; min-height: 44px; }
+.an-check input { width: 22px; height: 22px; accent-color: hsl(var(--hue) 85% 58%); flex: none; }
+.an-check > span { display: flex; flex-direction: column; min-width: 0; }
+.an-check .meta { overflow-wrap: anywhere; }
+@media (max-aspect-ratio: 1/1), (max-width: 640px) { .an-cols { grid-template-columns: minmax(0, 1fr); } .analyze { overflow-y: auto; } }

@@ -92,8 +92,11 @@ Mixer (`src/ui/MixerView.tsx`, `Mixer` class in engine.ts): one strip per pad ba
 solo, meter) + master bus; applied in live playback and every export except `renderPad` (neutral mix).
 The assistant has no mixer tool yet.
 
-Next, in the order shown on the module tabs: Analyze (auto cuts incl. vocals) →
-Stems → Suno workstation → AI setup (Gemini/GPT/local keys, knowledge shelf, research mode) → Plugins (desktop).
+Analyze (`src/ui/Analyze.tsx`, `src/audio/trackanalysis.ts`): suggested loops (bar-aligned, self-similar),
+hits (labelled by tone) and voice-like lines (steady pitch 90-900 Hz; no AI model, so a lead synth can match).
+A real vocal finder would need a downloadable model: ask the owner before adding one (rule 7).
+
+Next, in the order shown on the module tabs: Stems → Suno workstation → AI setup (Gemini/GPT/local keys, knowledge shelf, research mode) → Plugins (desktop).
 Alongside: co-pilot mode (explained steps, point-and-ask, starter kit), sample "recipes", sampler extras
 (attack/decay, choke groups, velocity, 8/16-bar loops, 32 steps, probability, pattern chains, chords,
 arpeggiator), library sidebar, Suno URL field, downloadable project file, mic sampling (web build only).

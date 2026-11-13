@@ -107,7 +107,7 @@
         {
           "sel": "#mod-analyze",
           "name": "Analyze",
-          "text": "Planned: suggested cuts across a whole song, including vocal lines."
+          "text": "Suggested loops, drum hits and vocal or lead lines from a whole song, ready to send to pads."
         },
         {
           "sel": "#mod-stems",
@@ -576,6 +576,69 @@
       ]
     },
     {
+      "id": "analyze",
+      "title": "Analyze",
+      "clip": ".analyze",
+      "intro": "The quickest way to turn a downloaded song into pads. Pick the song, tap Analyse, listen to the suggestions, tick the ones you like, and send them to a bank.",
+      "marks": [
+        {
+          "sel": "#an-import",
+          "name": "Import a song",
+          "text": "Brings a WAV or MP3 into the project and selects it for analysis."
+        },
+        {
+          "sel": "#an-sample",
+          "name": "Song",
+          "text": "Which sample in the project to analyse."
+        },
+        {
+          "sel": "#an-run",
+          "name": "Analyse",
+          "text": "Measures the song. A long song can take a few seconds. Only the first six minutes are analysed."
+        },
+        {
+          "sel": ".analyze .chopbar button:has-text(\"Use\")",
+          "name": "Use tempo",
+          "text": "Sets the project to the song's tempo, so loops from it play in time."
+        },
+        {
+          "sel": ".an-overview",
+          "name": "Overview",
+          "text": "The whole song, with each suggestion marked: loops on the top row, vocal or lead lines in the middle, hits at the bottom. Ticked ones are brighter."
+        },
+        {
+          "sel": ".an-col",
+          "name": "Loops",
+          "text": "Stretches of 1, 2 or 4 bars that repeat cleanly, counted from the beat. The percentage says how closely the next bars match."
+        },
+        {
+          "sel": ".an-col >> nth=1",
+          "name": "Hits",
+          "text": "The strongest single drum hits, labelled by their tone: low (kick or bass), mid (snare or clap) or bright (hat or shaker)."
+        },
+        {
+          "sel": ".an-col >> nth=2",
+          "name": "Vocal or lead lines",
+          "text": "Places where a steady pitch holds for a while, which is usually singing. It measures pitch, not words, so a lead synth can show up here too."
+        },
+        {
+          "sel": ".an-item .btn.icon",
+          "name": "Play and tick",
+          "text": "▶ plays the suggestion. The tick box chooses it for sending."
+        },
+        {
+          "sel": "#an-bank",
+          "name": "Send to bank",
+          "text": "Which bank the ticked suggestions go to, starting at pad 1. It replaces what is on that bank; the note beside it warns you how many pads are loaded."
+        },
+        {
+          "sel": "#an-send",
+          "name": "Send to pads",
+          "text": "Puts the ticked suggestions on the pads, up to 16. One Undo takes them all off again."
+        }
+      ]
+    },
+    {
       "id": "library",
       "title": "Library: sounds",
       "clip": ".sheet",
@@ -707,6 +770,16 @@
         "Fix any cut by dragging its yellow marker, or switch the tool to Add cut or Remove cut.",
         "Tap Send to pads.",
         "Tap the pads to play your slices."
+      ]
+    },
+    {
+      "title": "Turn a downloaded song into pads",
+      "steps": [
+        "Open Analyze and tap Import a song.",
+        "Tap Analyse.",
+        "Tap ▶ on suggestions to hear them. Tick the ones you like.",
+        "Choose a bank and tap Send to pads.",
+        "Open the Sampler, switch to that bank and play. Shape the sounds on the FX tab."
       ]
     },
     {
