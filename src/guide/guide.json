@@ -57,6 +57,11 @@
           "text": "Renders one pass of the loop to an audio file. Echo and reverb tails that run past the end are wrapped to the start, so the file loops cleanly. Inside the Claude page the WAV arrives in a zip."
         },
         {
+          "sel": "#new-project",
+          "name": "New",
+          "text": "Clears everything (samples, pads, patterns, clips, song) to start fresh. Tap twice. Undo brings it all back. Your Library is not touched."
+        },
+        {
           "sel": "#library",
           "name": "Library",
           "text": "Opens your saved sounds and saved projects."
@@ -158,9 +163,19 @@
           "text": "Appears when a tempo was detected in the sample. Tap to set the project to it. Very fast or slow tracks can read as half or double; type the right number if so."
         },
         {
+          "sel": "#preview",
+          "name": "Play sample",
+          "text": "Plays the whole track from the start, with a white line moving across the waveform. Tap again to stop. The Play button in the top bar plays the pads loop, not the track."
+        },
+        {
           "sel": "#save-sample",
           "name": "Save to library",
           "text": "Keeps the whole sample in your Library so other projects can use it."
+        },
+        {
+          "sel": "#remove-sample",
+          "name": "Remove sample",
+          "text": "Takes this track out of the project and empties any pads using it. Tap twice. Undo brings it back."
         },
         {
           "sel": "[aria-label=\"Waveform tool\"]",
@@ -815,6 +830,7 @@
       "title": "Chop a track onto pads",
       "steps": [
         "Tap Import audio and choose a WAV or MP3.",
+        "Tap ▶ Play sample to hear the whole track.",
         "Tap Auto-slice. Move the slider beside it until the cuts sit on the hits you want.",
         "Fix any cut by dragging its yellow marker, or switch the tool to Add cut or Remove cut.",
         "Tap Send to pads.",

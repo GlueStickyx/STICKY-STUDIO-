@@ -514,9 +514,35 @@ export class Engine {
     if (!buf) return;
     const now = this.ctx.currentTime;
     this.auditionVoice?.stop(now);
+    this.preview = null; // a slice audition replaces a whole-sample preview
     const plain: Pad = { ...getProject().pads[0], sampleId, start, end, gain: 1, semitones: 0, reverse: false, steps: [] };
     plain.fx = defaultFx();
     this.auditionVoice = playPadVoice(this.mixer, -1, buf, null, plain, now, 1);
+  }
+
+  /** What the chop view's Play button is playing: which sample, from where, and since when (for the moving line). */
+  preview: { sampleId: string; from: number; startedAt: number; end: number } | null = null;
+  /** Play a sample from `from` seconds to its end, without effects. Calling it again restarts; stopPreview stops. */
+  previewSample(sampleId: string, from = 0) {
+    if (!this.ctx) return;
+    const buf = this.buffers.get(sampleId);
+    if (!buf) return;
+    const start = Math.max(0, Math.min(from, buf.duration - 0.01));
+    this.audition(sampleId, start, buf.duration);
+    this.preview = { sampleId, from: start, startedAt: this.ctx.currentTime, end: buf.duration };
+  }
+  stopPreview() {
+    if (!this.ctx) return;
+    this.auditionVoice?.stop(this.ctx.currentTime);
+    this.auditionVoice = null;
+    this.preview = null;
+  }
+  /** Seconds into the previewed sample right now, or null when nothing is previewing (or it reached the end). */
+  previewPosition(): number | null {
+    if (!this.ctx || !this.preview) return null;
+    const t = this.preview.from + (this.ctx.currentTime - this.preview.startedAt);
+    if (t >= this.preview.end) { this.preview = null; return null; }
+    return t;
   }
 
   /** Play a whole buffer once through the studio output (library preview). Returns a function that stops it. */
@@ -605,3 +631,5 @@ export class Engine {
 }
 
 export const engine = new Engine();
+// Lets the browser checks confirm sound is really coming out (reads the meters; changes nothing).
+if (typeof window !== 'undefined') (window as unknown as { __levels: () => number[] }).__levels = () => engine.levels();

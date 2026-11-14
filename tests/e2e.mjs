@@ -424,6 +424,31 @@ try {
   check('imported file appears in the sample list', true);
   await page.click('#autoslice');
   check('imported file slices at its 4 hits', (await page.locator('.chopbar .meta').innerText()).startsWith('4 '), await page.locator('.chopbar .meta').innerText());
+  // Play sample: the whole imported track is heard (master meter moves) with a moving line, and Stop stops it.
+  await page.click('#preview');
+  await page.waitForFunction(() => !document.querySelector('.wave-head').hidden, null, { timeout: 3000 });
+  await page.waitForTimeout(250);
+  check('Play sample shows a moving line on the waveform', true);
+  check('and the track is actually sounding', (await page.evaluate(() => window.__levels?.()))?.[4] > 0.01);
+  await page.click('#preview');
+  await page.waitForTimeout(100); // the line is redrawn on the next frame
+  check('Stop ends the preview', await page.locator('.wave-head[hidden]').count() === 1 && (await page.locator('#preview').innerText()).includes('Play'));
+  // Remove sample needs two taps and can be undone.
+  const samplesBefore = await page.locator('#sample option').count();
+  await page.click('#remove-sample');
+  check('one tap only arms Remove sample', await page.locator('#sample option').count() === samplesBefore);
+  await page.click('#remove-sample');
+  check('the second tap removes it', await page.locator('#sample option').count() === samplesBefore - 1);
+  await page.click('#undo');
+  check('undo brings the sample back', await page.locator('#sample option').count() === samplesBefore);
+  // New clears everything; undo restores it.
+  await page.click('#new-project');
+  await page.click('#new-project');
+  check('New clears every pad and sample', await page.locator('.pad.loaded').count() === 0 && await page.locator('#sample').count() === 0);
+  await page.click('#undo');
+  check('undo restores the cleared project', await page.locator('.pad.loaded').count() > 0 && await page.locator('#sample option').count() === samplesBefore);
+  await page.selectOption('#sample', { label: 'my-test-tone' });
+
   await page.setInputFiles('#file', { name: 'broken.mp3', mimeType: 'audio/mpeg', buffer: Buffer.from('not audio') });
   await page.waitForSelector('.toast');
   check('unreadable file shows a message', (await page.locator('.toast').innerText()).includes('Could not read'));

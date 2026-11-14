@@ -17,6 +17,21 @@ export function Waveform({ sample, project, tool }: { sample: Sample; project: P
   const [view, setView] = useState({ start: 0, end: sample.duration });
   const [drag, setDrag] = useState<{ index: number; time: number } | null>(null);
   const [flash, setFlash] = useState<number | null>(null);
+  const head = useRef<HTMLDivElement>(null);
+  useEffect(() => { // moving line while the Play button is previewing this sample
+    let raf = 0;
+    const loop = () => {
+      const el = head.current, t = engine.previewPosition();
+      if (el) {
+        const on = t !== null && engine.preview?.sampleId === sample.id && t >= view.start && t <= view.end;
+        el.hidden = !on;
+        if (on) el.style.transform = `translateX(${((t! - view.start) / (view.end - view.start)) * size.w}px)`;
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [sample.id, view, size.w]);
 
   useEffect(() => { setView({ start: 0, end: sample.duration }); }, [sample.id, sample.duration]);
   useEffect(() => {
@@ -107,6 +122,7 @@ export function Waveform({ sample, project, tool }: { sample: Sample; project: P
     <div className="wave">
       <div className="wave-canvas" ref={wrap}>
         <canvas ref={canvas} style={{ width: size.w, height: size.h }} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
+        <div className="wave-head" ref={head} hidden />
         <div className="wave-zoom">
           <button className="btn icon" aria-label="Zoom out" disabled={!zoomed} onClick={() => zoom(2)}>−</button>
           <button className="btn icon" aria-label="Zoom in" onClick={() => zoom(0.5)}>+</button>

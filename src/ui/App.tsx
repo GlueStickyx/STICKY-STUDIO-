@@ -26,14 +26,17 @@ import type { Tool } from './Waveform';
 
 const useProject = () => useSyncExternalStore(subscribe, getProject);
 function useTick<T>(read: () => T): T {
-  // Re-read a fast-changing engine value every animation frame.
+  // Re-read a fast-changing engine value every animation frame. The latest `read` is used each frame,
+  // so a value that depends on props (which sample, which pad) never goes stale.
   const [v, setV] = useState(read);
+  const latest = useRef(read);
+  latest.current = read;
   useEffect(() => {
     let raf = 0;
-    const loop = () => { setV(read()); raf = requestAnimationFrame(loop); };
+    const loop = () => { setV(latest.current()); raf = requestAnimationFrame(loop); };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, []); // eslint-disable-line
+  }, []);
   return v;
 }
 
@@ -174,6 +177,7 @@ function Transport({ p, say, chat, toggleChat, openSheet }: { p: Project; say: (
         <button id="export" className="btn primary" disabled={busy}
           onClick={async () => { setBusy(true); try { say(await exportLoopWav()); } catch { say('Export failed. Try again.'); } setBusy(false); }}>
           {busy ? 'Rendering…' : inArtifact() ? 'Export loop' : 'Export WAV'}</button>
+        <TwoTap id="new-project" label="New" confirm="Tap again: clear everything" onConfirm={() => { engine.stop(); engine.stopPreview(); dispatch('project.reset'); say('Everything is cleared. Undo brings it all back. Save to the Library first if you want to keep a copy.'); }} />
         <button id="library" className="btn" onClick={() => openSheet('library')}>Library</button>
         <button id="assistant" className={chat ? 'btn on' : 'btn'} aria-pressed={chat} onClick={toggleChat}>Assistant</button>
         <button id="guide" className="btn" onClick={() => openSheet('guide')}>Guide</button>
@@ -210,7 +214,9 @@ function ChopBar({ p, tool, setTool, say, switcher }: { p: Project; tool: Tool; 
         )}
         {s?.bpm && <button className="btn" title="Set the project tempo to this sample's detected tempo"
           onClick={() => dispatch('project.setBpm', { bpm: s.bpm })}>Use {s.bpm} BPM</button>}
+        {s && <PreviewButton id={s.id} />}
         {s && <button id="save-sample" className="btn" onClick={async () => say(await saveSampleToLibrary(s.id))}>Save to library</button>}
+        {s && <TwoTap id="remove-sample" label="Remove sample" confirm="Tap again to remove" onConfirm={() => { engine.stopPreview(); dispatch('sample.remove', { id: s.id }); say(`"${s.name}" removed, and any pads using it were emptied. Undo brings it back.`); }} />}
       </div>
       {s && (
         <>
@@ -517,4 +523,20 @@ function Planned({ id, back }: { id: string; back: () => void }) {
       </div>
     </section>
   );
+}
+
+/** Plays the whole sample shown in the chop view, from the start, with a moving line on the waveform. */
+function PreviewButton({ id }: { id: string }) {
+  const playing = useTick(() => engine.previewPosition() !== null && engine.preview?.sampleId === id);
+  return (
+    <button id="preview" className={playing ? 'btn on' : 'btn'} aria-pressed={playing}
+      onClick={() => (playing ? engine.stopPreview() : engine.previewSample(id, 0))}>{playing ? '■ Stop' : '▶ Play sample'}</button>
+  );
+}
+
+/** A button that needs a second tap within a few seconds, for anything that clears work. */
+function TwoTap({ id, label, confirm, onConfirm }: { id: string; label: string; confirm: string; onConfirm: () => void }) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => { if (!armed) return; const t = setTimeout(() => setArmed(false), 3500); return () => clearTimeout(t); }, [armed]);
+  return <button id={id} className={armed ? 'btn danger armed' : 'btn'} onClick={() => { if (armed) { setArmed(false); onConfirm(); } else setArmed(true); }}>{armed ? confirm : label}</button>;
 }

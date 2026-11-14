@@ -408,3 +408,6 @@ select, input[type="number"], .text, .chat-form textarea, .chat-key input {
 a.btn { display: inline-flex; align-items: center; text-decoration: none; color: inherit; }
 .steps-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
 @media (max-aspect-ratio: 1/1), (max-width: 640px) { .suno { grid-template-columns: minmax(0, 1fr); overflow-y: auto; } .suno-builder, .suno-side { overflow: visible; } }
+
+.wave-head { position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: #fff; box-shadow: 0 0 8px #fff; pointer-events: none; }
+.btn.armed { background: linear-gradient(180deg, hsl(355 85% 58%), hsl(355 75% 42%)); color: #fff; border-color: hsl(355 70% 22%); text-shadow: none; }
